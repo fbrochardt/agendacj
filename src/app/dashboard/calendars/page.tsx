@@ -21,7 +21,7 @@ export default async function Calendars({ searchParams }: { searchParams: Search
   return (
     <>
       <PageHeader
-        title="Agendas"
+        title="Google e Apple"
         subtitle="Os compromissos das agendas conectadas bloqueiam seus horários. Novos agendamentos são gravados na agenda de destino."
       />
       <Flash {...sp} />

@@ -10,7 +10,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: "/dashboard", label: "Agendamentos" },
     { href: "/dashboard/event-types", label: "Tipos de evento" },
     { href: "/dashboard/availability", label: "Disponibilidade" },
-    { href: "/dashboard/calendars", label: "Agendas" },
+    { href: "/dashboard/agendas", label: "Agendas da equipe" },
+    { href: "/dashboard/calendars", label: "Google e Apple" },
     ...(profile.role === "admin" ? [{ href: "/dashboard/team", label: "Equipe" }] : []),
     { href: "/dashboard/settings", label: "Perfil" },
   ];

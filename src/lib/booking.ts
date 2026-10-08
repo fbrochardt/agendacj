@@ -1,4 +1,5 @@
 import "server-only";
+import { ownerBusy } from "./agendas";
 import { deleteCalendarEvent, externalBusy } from "./calendars";
 import { computeSlots, type Busy } from "./slots";
 import { admin } from "./supabase/admin";
@@ -28,17 +29,20 @@ export async function availableSlots(host: PublicHost, et: EventType, from: Date
   const busyFrom = new Date(from.getTime() - pad - 86_400_000);
   const busyTo = new Date(to.getTime() + pad + 86_400_000);
 
-  const [rules, booked, external] = await Promise.all([
+  const [rules, booked, external, internal] = await Promise.all([
     db.from("availability").select("weekday, start_time, end_time").eq("user_id", host.id),
     db.from("bookings").select("start_at, end_at").eq("user_id", host.id).eq("status", "confirmed")
       .lt("start_at", busyTo.toISOString()).gt("end_at", busyFrom.toISOString()),
     externalBusy(host.id, busyFrom, busyTo, host.timezone),
+    // Agendas internas em que a pessoa é dona também ocupam o horário dela.
+    ownerBusy(host.id, busyFrom, busyTo),
   ]);
   if (rules.error) throw new Error(rules.error.message);
   if (booked.error) throw new Error(booked.error.message);
 
   const busy: Busy[] = [
     ...external,
+    ...internal,
     ...(booked.data ?? []).map((b) => ({ start: Date.parse(b.start_at), end: Date.parse(b.end_at) })),
   ];
   return computeSlots({

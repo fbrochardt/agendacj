@@ -29,7 +29,7 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
       <PageHeader title="Agendamentos" subtitle={`Horários exibidos em ${profile.timezone.replace(/_/g, " ")}.`} />
       <Flash {...sp} />
       {Boolean(warnings.count) && (
-        <Flash error="Alguns agendamentos têm avisos de agenda (veja abaixo). Confira a página Agendas." />
+        <Flash error="Alguns agendamentos têm avisos de agenda (veja abaixo). Confira a página Google e Apple." />
       )}
 
       <section className="card divide-y divide-neutral-200">
