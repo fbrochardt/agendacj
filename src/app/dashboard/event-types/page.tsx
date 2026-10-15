@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { Flash, PageHeader, type Search } from "@/components/ui";
-import { appUrl, requireUser } from "@/lib/auth";
+import { appUrl, requireAdmin } from "@/lib/auth";
 import { locationText, type EventType } from "@/lib/types";
 
 export default async function EventTypes({ searchParams }: { searchParams: Search }) {
-  const { supabase, profile } = await requireUser();
+  const { supabase, profile } = await requireAdmin();
   const sp = await searchParams;
   const { data } = await supabase.from("event_types").select("*").order("created_at");
   const items = (data ?? []) as EventType[];

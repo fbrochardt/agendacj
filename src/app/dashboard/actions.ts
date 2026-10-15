@@ -81,7 +81,7 @@ function eventTypeFields(fd: FormData) {
 }
 
 export async function saveEventType(fd: FormData) {
-  const { supabase, profile } = await requireUser();
+  const { supabase, profile } = await requireAdmin();
   const id = s(fd, "id");
   const path = id ? `/dashboard/event-types/${id}` : "/dashboard/event-types/new";
   const fields = eventTypeFields(fd);
@@ -97,7 +97,7 @@ export async function saveEventType(fd: FormData) {
 }
 
 export async function deleteEventType(fd: FormData) {
-  const { supabase } = await requireUser();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase.from("event_types").delete().eq("id", s(fd, "id"));
   if (error) go("/dashboard/event-types", "error", error.message);
   revalidatePath("/dashboard/event-types");
@@ -136,7 +136,7 @@ export async function saveAvailability(fd: FormData) {
 const CAL = "/dashboard/calendars";
 
 export async function connectApple(fd: FormData) {
-  const { profile } = await requireUser();
+  const { profile } = await requireAdmin();
   const username = s(fd, "apple_id").toLowerCase();
   const password = s(fd, "app_password").replace(/\s/g, "");
   if (!username || !password) go(CAL, "error", "Informe o Apple ID e a senha de app.");
@@ -177,7 +177,7 @@ async function ownConnection(userId: string, id: string): Promise<CalendarConnec
 }
 
 export async function disconnectCalendar(fd: FormData) {
-  const { profile } = await requireUser();
+  const { profile } = await requireAdmin();
   const conn = await ownConnection(profile.id, s(fd, "id"));
   const db = admin();
   await db.from("calendar_connections").delete().eq("id", conn.id);
@@ -189,7 +189,7 @@ export async function disconnectCalendar(fd: FormData) {
 }
 
 export async function setDestination(fd: FormData) {
-  const { profile } = await requireUser();
+  const { profile } = await requireAdmin();
   const conn = await ownConnection(profile.id, s(fd, "id"));
   const db = admin();
   await db.from("calendar_connections").update({ is_destination: false }).eq("user_id", profile.id);

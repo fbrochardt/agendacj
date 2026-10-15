@@ -1,5 +1,5 @@
 import { Flash, PageHeader, type Search } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { googleConfigured } from "@/lib/calendars/google";
 import { admin } from "@/lib/supabase/admin";
 import type { CalendarConnection } from "@/lib/types";
@@ -8,7 +8,7 @@ import { connectApple, disconnectCalendar, setDestination } from "../actions";
 type Row = Omit<CalendarConnection, "secret">;
 
 export default async function Calendars({ searchParams }: { searchParams: Search }) {
-  const { profile } = await requireUser();
+  const { profile } = await requireAdmin();
   const sp = await searchParams;
   // As credenciais ficam só no servidor: a coluna `secret` nunca é selecionada aqui.
   const { data } = await admin()

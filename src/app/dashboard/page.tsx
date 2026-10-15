@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { Flash, PageHeader, type Search } from "@/components/ui";
-import { ownerAppointments } from "@/lib/agendas";
+import { listAgendas, ownerAppointments } from "@/lib/agendas";
 import { requireUser } from "@/lib/auth";
 import type { Booking } from "@/lib/types";
 import { cancelAsHost } from "./actions";
@@ -52,6 +52,8 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
     })),
   ].sort((x, y) => Date.parse(x.start) - Date.parse(y.start));
   const nowMs = Date.now();
+  // Usuários abrem as agendas atribuídas a eles por aqui (não têm o menu Agendas da equipe).
+  const myAgendas = profile.role === "admin" ? [] : await listAgendas(profile);
 
   return (
     <>
@@ -98,6 +100,28 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
           );
         })}
       </section>
+
+      {profile.role !== "admin" && (
+        <>
+          <h2 className="mb-2 text-sm font-semibold">Minhas agendas</h2>
+          <section className="card mb-8 divide-y divide-neutral-200">
+            {myAgendas.length === 0 && (
+              <p className="p-6 text-sm text-neutral-500">Nenhuma agenda atribuída a você ainda. Fale com um administrador.</p>
+            )}
+            {myAgendas.map((a) => (
+              <Link key={a.id} href={`/dashboard/agendas/${a.id}`} className="flex items-center justify-between gap-3 p-4 transition hover:bg-neutral-50">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{a.name}</span>
+                  <span className="block truncate text-sm text-neutral-500">
+                    {a.owner_id === profile.id ? "Você é o dono" : `Dono: ${a.owner?.name ?? "usuário removido"}`}
+                  </span>
+                </span>
+                <span className="shrink-0 text-sm text-neutral-500">Abrir ›</span>
+              </Link>
+            ))}
+          </section>
+        </>
+      )}
 
       <h2 className="mb-2 text-sm font-semibold">Próximas reservas pela página pública</h2>
       <section className="card divide-y divide-neutral-200">

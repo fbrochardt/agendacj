@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { appUrl, requireUser } from "@/lib/auth";
+import { appUrl, requireAdmin } from "@/lib/auth";
 import { googleExchange } from "@/lib/calendars/google";
 import { encrypt } from "@/lib/crypto";
 import { admin } from "@/lib/supabase/admin";
@@ -8,7 +8,7 @@ import { admin } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const { profile } = await requireUser();
+  const { profile } = await requireAdmin();
   const q = new URL(req.url).searchParams;
   const back = (key: "ok" | "error", msg: string) => {
     const res = NextResponse.redirect(`${appUrl()}/dashboard/calendars?${key}=${encodeURIComponent(msg)}`);

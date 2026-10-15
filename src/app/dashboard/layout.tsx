@@ -6,15 +6,23 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { profile } = await requireUser();
-  const links = [
-    { href: "/dashboard", label: "Agendamentos" },
-    { href: "/dashboard/event-types", label: "Tipos de evento" },
-    { href: "/dashboard/availability", label: "Disponibilidade" },
-    { href: "/dashboard/agendas", label: "Agendas da equipe" },
-    { href: "/dashboard/calendars", label: "Google e Apple" },
-    ...(profile.role === "admin" ? [{ href: "/dashboard/team", label: "Equipe" }] : []),
-    { href: "/dashboard/settings", label: "Perfil" },
-  ];
+  // Usuários veem só Agendamentos, Disponibilidade e Perfil; administradores veem tudo.
+  const links =
+    profile.role === "admin"
+      ? [
+          { href: "/dashboard", label: "Agendamentos" },
+          { href: "/dashboard/event-types", label: "Tipos de evento" },
+          { href: "/dashboard/availability", label: "Disponibilidade" },
+          { href: "/dashboard/agendas", label: "Agendas da equipe" },
+          { href: "/dashboard/calendars", label: "Google e Apple" },
+          { href: "/dashboard/team", label: "Equipe" },
+          { href: "/dashboard/settings", label: "Perfil" },
+        ]
+      : [
+          { href: "/dashboard", label: "Agendamentos" },
+          { href: "/dashboard/availability", label: "Disponibilidade" },
+          { href: "/dashboard/settings", label: "Perfil" },
+        ];
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col md:flex-row">
       <aside className="shrink-0 border-b border-neutral-200 px-4 py-4 md:w-56 md:border-b-0 md:border-r md:py-8">

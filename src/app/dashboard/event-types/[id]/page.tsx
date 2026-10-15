@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash, PageHeader, type Search } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { LOCATION_LABELS, type EventType } from "@/lib/types";
 import { deleteEventType, saveEventType } from "../../actions";
 
@@ -12,7 +12,7 @@ export default async function EditEventType({
   params: Promise<{ id: string }>;
   searchParams: Search;
 }) {
-  const { supabase, profile } = await requireUser();
+  const { supabase, profile } = await requireAdmin();
   const { id } = await params;
   const sp = await searchParams;
   const isNew = id === "new";

@@ -59,7 +59,11 @@ export default async function AgendaPage({ params, searchParams }: Props) {
       <PageHeader
         title={agenda.name}
         subtitle={`Dono: ${owner.name} · horários em ${zone.replace(/_/g, " ")}`}
-        action={<Link href="/dashboard/agendas" className="btn-outline">Todas as agendas</Link>}
+        action={
+          isAdmin
+            ? <Link href="/dashboard/agendas" className="btn-outline">Todas as agendas</Link>
+            : <Link href="/dashboard" className="btn-outline">Voltar para Agendamentos</Link>
+        }
       />
       <Flash ok={sp.ok} error={sp.error} />
 

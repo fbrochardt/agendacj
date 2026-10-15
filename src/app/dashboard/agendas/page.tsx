@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { Flash, PageHeader, type Search } from "@/components/ui";
 import { listAgendas } from "@/lib/agendas";
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
 import { JOB_LABELS, type Profile } from "@/lib/types";
 import { createAgenda } from "./actions";
 
 export default async function Agendas({ searchParams }: { searchParams: Search }) {
-  const { profile } = await requireUser();
+  const { profile } = await requireAdmin();
   const sp = await searchParams;
   const isAdmin = profile.role === "admin";
   const agendas = await listAgendas(profile);

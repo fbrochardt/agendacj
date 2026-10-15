@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { appUrl, requireUser } from "@/lib/auth";
+import { appUrl, requireAdmin } from "@/lib/auth";
 import { googleAuthUrl, googleConfigured } from "@/lib/calendars/google";
 import { randomToken } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  await requireUser();
+  await requireAdmin();
   if (!googleConfigured()) {
     const msg = encodeURIComponent("Google ainda não configurado: defina GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET.");
     return NextResponse.redirect(`${appUrl()}/dashboard/calendars?error=${msg}`);
