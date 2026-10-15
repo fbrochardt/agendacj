@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { Flash, PageHeader, type Search } from "@/components/ui";
-import { listAgendas, ownerAppointments } from "@/lib/agendas";
+import { listAgendas, ownerAppointments, seesAllAgendas } from "@/lib/agendas";
 import { requireUser } from "@/lib/auth";
 import type { Booking } from "@/lib/types";
 import { cancelAsHost } from "./actions";
@@ -103,10 +103,12 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
 
       {profile.role !== "admin" && (
         <>
-          <h2 className="mb-2 text-sm font-semibold">Minhas agendas</h2>
+          <h2 className="mb-2 text-sm font-semibold">{seesAllAgendas(profile) ? "Agendas da equipe" : "Minhas agendas"}</h2>
           <section className="card mb-8 divide-y divide-neutral-200">
             {myAgendas.length === 0 && (
-              <p className="p-6 text-sm text-neutral-500">Nenhuma agenda atribuída a você ainda. Fale com um administrador.</p>
+              <p className="p-6 text-sm text-neutral-500">
+                {seesAllAgendas(profile) ? "Nenhuma agenda criada ainda." : "Nenhuma agenda atribuída a você ainda. Fale com um administrador."}
+              </p>
             )}
             {myAgendas.map((a) => (
               <Link key={a.id} href={`/dashboard/agendas/${a.id}`} className="flex items-center justify-between gap-3 p-4 transition hover:bg-neutral-50">

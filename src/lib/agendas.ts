@@ -34,10 +34,15 @@ async function assignedAgendaIds(userId: string): Promise<string[]> {
   return (data ?? []).map((r) => r.agenda_id as string);
 }
 
-/** Admin vê todas as agendas; usuários, as que são donos ou foram atribuídas a eles. */
+/** Admins e SDRs acessam todas as agendas; os demais, só as de que são donos ou que foram atribuídas a eles. */
+export function seesAllAgendas(viewer: Pick<Profile, "role" | "job">): boolean {
+  return viewer.role === "admin" || viewer.job === "sdr";
+}
+
+/** Admin e SDR veem todas as agendas; os demais, as que são donos ou foram atribuídas a eles. */
 export async function listAgendas(viewer: Profile): Promise<(Agenda & { owner: Owner | null })[]> {
   let q = admin().from("agendas").select("*").order("name");
-  if (viewer.role !== "admin") {
+  if (!seesAllAgendas(viewer)) {
     const ids = await assignedAgendaIds(viewer.id);
     q = ids.length ? q.or(`owner_id.eq.${viewer.id},id.in.(${ids.join(",")})`) : q.eq("owner_id", viewer.id);
   }
@@ -51,9 +56,9 @@ export async function listAgendas(viewer: Profile): Promise<(Agenda & { owner: O
   return agendas.map((a) => ({ ...a, owner: byId.get(a.owner_id) ?? null }));
 }
 
-/** Admin, dono ou pessoa atribuída podem acessar a agenda. */
+/** Admin, SDR, dono ou pessoa atribuída podem acessar a agenda (ver, agendar, reagendar e cancelar). */
 export async function canAccessAgenda(viewer: Profile, agenda: Pick<Agenda, "id" | "owner_id">): Promise<boolean> {
-  if (viewer.role === "admin" || agenda.owner_id === viewer.id) return true;
+  if (seesAllAgendas(viewer) || agenda.owner_id === viewer.id) return true;
   const { data } = await admin()
     .from("agenda_members").select("agenda_id").eq("agenda_id", agenda.id).eq("user_id", viewer.id).maybeSingle();
   return Boolean(data);

@@ -15,7 +15,7 @@ export default async function Team({ searchParams }: { searchParams: Search }) {
     <>
       <PageHeader
         title="Equipe"
-        subtitle="Administradores acessam todo o sistema e todas as agendas. Usuários acessam só as agendas atribuídas a eles."
+        subtitle="Administradores acessam todo o sistema. SDRs agendam, reagendam e cancelam em todas as agendas. Os demais usuários acessam só as agendas atribuídas a eles."
       />
       <Flash {...sp} />
 
