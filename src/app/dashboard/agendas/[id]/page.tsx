@@ -2,9 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import { Flash, PageHeader } from "@/components/ui";
-import { listAppointments, loadAgenda, type Appointment } from "@/lib/agendas";
+import { listAgendaMembers, listAppointments, loadAgenda, type AgendaMember, type Appointment } from "@/lib/agendas";
 import { requireUser } from "@/lib/auth";
-import { cancelAppointment, createAppointment, deleteAgenda, renameAgenda } from "../actions";
+import { admin } from "@/lib/supabase/admin";
+import { JOB_LABELS, ROLE_LABELS, type Profile } from "@/lib/types";
+import {
+  addAgendaMember, cancelAppointment, createAppointment, deleteAgenda, removeAgendaMember, renameAgenda,
+} from "../actions";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -20,6 +24,18 @@ export default async function AgendaPage({ params, searchParams }: Props) {
   const { agenda, owner } = found;
   const isAdmin = profile.role === "admin";
   const zone = owner.timezone;
+
+  // Quem tem acesso (só o admin vê e gerencia).
+  let members: AgendaMember[] = [];
+  let candidates: Pick<Profile, "id" | "name" | "role" | "job">[] = [];
+  if (isAdmin) {
+    members = await listAgendaMembers(agenda.id);
+    const taken = new Set([agenda.owner_id, ...members.map((m) => m.id)]);
+    const all = await admin().from("profiles").select("id, name, role, job").eq("role", "member").order("name");
+    candidates = ((all.data ?? []) as typeof candidates).filter((p) => !taken.has(p.id));
+  }
+  const describe = (p: { role: Profile["role"]; job: Profile["job"] }) =>
+    [p.job ? JOB_LABELS[p.job] : null, ROLE_LABELS[p.role]].filter(Boolean).join(" · ");
 
   // Semana exibida (segunda a domingo), no fuso do dono da agenda.
   const today = DateTime.now().setZone(zone).startOf("day");
@@ -81,14 +97,12 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                         {contact && <p className="mt-0.5 break-words text-sm text-neutral-600">{contact}</p>}
                         {a.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-500">{a.notes}</p>}
                       </div>
-                      {isAdmin && (
                         <form action={cancelAppointment} className="shrink-0">
                           <input type="hidden" name="id" value={a.id} />
                           <input type="hidden" name="agenda_id" value={agenda.id} />
                           <input type="hidden" name="dia" value={key} />
                           <button className="btn-danger">Cancelar</button>
                         </form>
-                      )}
                     </div>
                   );
                 })}
@@ -98,8 +112,7 @@ export default async function AgendaPage({ params, searchParams }: Props) {
         })}
       </section>
 
-      {isAdmin ? (
-        <>
+      <>
           <h2 className="mb-2 text-sm font-semibold">Novo agendamento</h2>
           <form action={createAppointment} className="card mb-8 max-w-2xl space-y-4 p-5">
             <input type="hidden" name="agenda_id" value={agenda.id} />
@@ -143,6 +156,38 @@ export default async function AgendaPage({ params, searchParams }: Props) {
             <p className="hint">Cliente, telefone e e-mail são opcionais. Nenhuma mensagem é enviada ao cliente.</p>
           </form>
 
+          {isAdmin && (
+          <>
+          <h2 className="mb-2 text-sm font-semibold">Quem tem acesso</h2>
+          <section className="card mb-8 max-w-2xl divide-y divide-neutral-200">
+            <div className="flex items-center justify-between gap-3 p-4 text-sm">
+              <span><span className="font-medium">{owner.name}</span> <span className="text-neutral-500">· dono da agenda</span></span>
+            </div>
+            <div className="p-4 text-sm text-neutral-500">Administradores acessam todas as agendas.</div>
+            {members.map((m) => (
+              <div key={m.id} className="flex items-center justify-between gap-3 p-4">
+                <span className="min-w-0 text-sm">
+                  <span className="font-medium">{m.name}</span> <span className="text-neutral-500">· {describe(m)}</span>
+                </span>
+                <form action={removeAgendaMember}>
+                  <input type="hidden" name="agenda_id" value={agenda.id} />
+                  <input type="hidden" name="user_id" value={m.id} />
+                  <button className="btn-danger">Remover acesso</button>
+                </form>
+              </div>
+            ))}
+            <form action={addAgendaMember} className="flex flex-wrap items-center gap-2 p-4">
+              <input type="hidden" name="agenda_id" value={agenda.id} />
+              <select name="user_id" required defaultValue="" className="input w-auto min-w-0 flex-1" aria-label="Pessoa">
+                <option value="" disabled>{candidates.length ? "Escolha um usuário" : "Todos os usuários já têm acesso"}</option>
+                {candidates.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}{c.job ? ` (${JOB_LABELS[c.job]})` : ""}</option>
+                ))}
+              </select>
+              <button className="btn-outline" disabled={!candidates.length}>Dar acesso</button>
+            </form>
+          </section>
+
           <details className="max-w-2xl">
             <summary className="cursor-pointer text-sm font-semibold">Configurações da agenda</summary>
             <form action={renameAgenda} className="card mt-3 space-y-4 p-5">
@@ -166,10 +211,9 @@ export default async function AgendaPage({ params, searchParams }: Props) {
               <button className="btn-danger">Excluir agenda</button>
             </form>
           </details>
-        </>
-      ) : (
-        <p className="text-sm text-neutral-500">Para marcar ou cancelar um horário nesta agenda, fale com um administrador.</p>
-      )}
+          </>
+          )}
+      </>
     </>
   );
 }

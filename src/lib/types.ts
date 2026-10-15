@@ -5,8 +5,19 @@ export type Profile = {
   username: string;
   timezone: string;
   role: "admin" | "member";
+  job: Job | null;
   created_at: string;
 };
+
+export type Job = "vendedor" | "sdr";
+
+export const JOB_LABELS: Record<Job, string> = { vendedor: "Vendedor", sdr: "SDR" };
+
+export const ROLE_LABELS: Record<"admin" | "member", string> = { admin: "Administrador", member: "Usuário" };
+
+export function parseJob(v: string): Job | null {
+  return v === "vendedor" || v === "sdr" ? v : null;
+}
 
 export type LocationType = "google_meet" | "in_person" | "phone" | "custom";
 

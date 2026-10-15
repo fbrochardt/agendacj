@@ -8,7 +8,7 @@ import { cancelBooking } from "@/lib/booking";
 import { appleListCalendars } from "@/lib/calendars/apple";
 import { encrypt } from "@/lib/crypto";
 import { admin } from "@/lib/supabase/admin";
-import type { Booking, CalendarConnection, LocationType } from "@/lib/types";
+import { parseJob, type Booking, type CalendarConnection, type LocationType } from "@/lib/types";
 import { createUser, validateUsername } from "@/lib/users";
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -225,6 +225,7 @@ export async function addMember(fd: FormData) {
     username: s(fd, "username"),
     password: String(fd.get("password") ?? ""),
     role: s(fd, "role") === "admin" ? "admin" : "member",
+    job: parseJob(s(fd, "job")),
     timezone: s(fd, "timezone"),
   });
   if (error) go(TEAM, "error", error);
@@ -236,11 +237,19 @@ export async function setRole(fd: FormData) {
   const { profile } = await requireAdmin();
   const id = s(fd, "id");
   const role = s(fd, "role") === "admin" ? "admin" : "member";
-  if (id === profile.id) go(TEAM, "error", "Você não pode alterar o seu próprio papel.");
+  if (id === profile.id) go(TEAM, "error", "Você não pode alterar o seu próprio nível de acesso.");
   const { error } = await admin().from("profiles").update({ role }).eq("id", id);
   if (error) go(TEAM, "error", error.message);
   revalidatePath(TEAM);
-  go(TEAM, "ok", "Papel atualizado.");
+  go(TEAM, "ok", "Nível de acesso atualizado.");
+}
+
+export async function setJob(fd: FormData) {
+  await requireAdmin();
+  const { error } = await admin().from("profiles").update({ job: parseJob(s(fd, "job")) }).eq("id", s(fd, "id"));
+  if (error) go(TEAM, "error", error.message);
+  revalidatePath(TEAM);
+  go(TEAM, "ok", "Função atualizada.");
 }
 
 export async function removeMember(fd: FormData) {

@@ -27,31 +27,60 @@ export type Owner = Pick<Profile, "id" | "name" | "username" | "timezone">;
 
 export const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
-/** Admin vê todas as agendas; os demais, só as que são deles. */
+/** IDs das agendas atribuídas a um usuário (além das que ele é dono). */
+async function assignedAgendaIds(userId: string): Promise<string[]> {
+  const { data, error } = await admin().from("agenda_members").select("agenda_id").eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => r.agenda_id as string);
+}
+
+/** Admin vê todas as agendas; usuários, as que são donos ou foram atribuídas a eles. */
 export async function listAgendas(viewer: Profile): Promise<(Agenda & { owner: Owner | null })[]> {
   let q = admin().from("agendas").select("*").order("name");
-  if (viewer.role !== "admin") q = q.eq("owner_id", viewer.id);
+  if (viewer.role !== "admin") {
+    const ids = await assignedAgendaIds(viewer.id);
+    q = ids.length ? q.or(`owner_id.eq.${viewer.id},id.in.(${ids.join(",")})`) : q.eq("owner_id", viewer.id);
+  }
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   const agendas = (data ?? []) as Agenda[];
   if (agendas.length === 0) return [];
-  const ids = [...new Set(agendas.map((a) => a.owner_id))];
-  const owners = await admin().from("profiles").select("id, name, username, timezone").in("id", ids);
+  const ownerIds = [...new Set(agendas.map((a) => a.owner_id))];
+  const owners = await admin().from("profiles").select("id, name, username, timezone").in("id", ownerIds);
   const byId = new Map(((owners.data ?? []) as Owner[]).map((o) => [o.id, o]));
   return agendas.map((a) => ({ ...a, owner: byId.get(a.owner_id) ?? null }));
 }
 
-/** Devolve a agenda se quem pede for admin ou o dono; senão, null. */
+/** Admin, dono ou pessoa atribuída podem acessar a agenda. */
+export async function canAccessAgenda(viewer: Profile, agenda: Pick<Agenda, "id" | "owner_id">): Promise<boolean> {
+  if (viewer.role === "admin" || agenda.owner_id === viewer.id) return true;
+  const { data } = await admin()
+    .from("agenda_members").select("agenda_id").eq("agenda_id", agenda.id).eq("user_id", viewer.id).maybeSingle();
+  return Boolean(data);
+}
+
+/** Devolve a agenda se quem pede tiver acesso a ela; senão, null. */
 export async function loadAgenda(viewer: Profile, id: string): Promise<{ agenda: Agenda; owner: Owner } | null> {
   if (!isUuid(id)) return null;
   const { data } = await admin().from("agendas").select("*").eq("id", id).maybeSingle();
   const agenda = data as Agenda | null;
-  if (!agenda) return null;
-  if (viewer.role !== "admin" && agenda.owner_id !== viewer.id) return null;
+  if (!agenda || !(await canAccessAgenda(viewer, agenda))) return null;
   const owner = await admin()
     .from("profiles").select("id, name, username, timezone").eq("id", agenda.owner_id).maybeSingle();
   if (!owner.data) return null;
   return { agenda, owner: owner.data as Owner };
+}
+
+export type AgendaMember = Pick<Profile, "id" | "name" | "email" | "role" | "job">;
+
+/** Pessoas atribuídas a uma agenda. */
+export async function listAgendaMembers(agendaId: string): Promise<AgendaMember[]> {
+  const { data, error } = await admin().from("agenda_members").select("user_id").eq("agenda_id", agendaId);
+  if (error) throw new Error(error.message);
+  const ids = (data ?? []).map((r) => r.user_id as string);
+  if (ids.length === 0) return [];
+  const people = await admin().from("profiles").select("id, name, email, role, job").in("id", ids).order("name");
+  return (people.data ?? []) as AgendaMember[];
 }
 
 export async function listAppointments(agendaId: string, from: Date, to: Date): Promise<Appointment[]> {

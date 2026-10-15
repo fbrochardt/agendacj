@@ -3,7 +3,7 @@ import { Flash, PageHeader, type Search } from "@/components/ui";
 import { listAgendas } from "@/lib/agendas";
 import { requireUser } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
-import type { Profile } from "@/lib/types";
+import { JOB_LABELS, type Profile } from "@/lib/types";
 import { createAgenda } from "./actions";
 
 export default async function Agendas({ searchParams }: { searchParams: Search }) {
@@ -21,9 +21,9 @@ export default async function Agendas({ searchParams }: { searchParams: Search }
     for (const row of data ?? []) counts.set(row.agenda_id, (counts.get(row.agenda_id) ?? 0) + 1);
   }
 
-  let members: Pick<Profile, "id" | "name" | "email">[] = [];
+  let members: Pick<Profile, "id" | "name" | "email" | "job">[] = [];
   if (isAdmin) {
-    const { data } = await admin().from("profiles").select("id, name, email").order("name");
+    const { data } = await admin().from("profiles").select("id, name, email, job").order("name");
     members = data ?? [];
   }
 
@@ -34,7 +34,7 @@ export default async function Agendas({ searchParams }: { searchParams: Search }
         subtitle={
           isAdmin
             ? "Agendas internas do app, uma para cada vendedor. Não dependem de Google nem de Apple."
-            : "Agendas internas em que você é o dono. Os agendamentos são feitos pelos administradores."
+            : "Agendas atribuídas a você pelos administradores. Você pode marcar e cancelar horários nelas."
         }
       />
       <Flash {...sp} />
@@ -42,7 +42,7 @@ export default async function Agendas({ searchParams }: { searchParams: Search }
       <section className="card mb-8 divide-y divide-neutral-200">
         {agendas.length === 0 && (
           <p className="p-6 text-sm text-neutral-500">
-            {isAdmin ? "Nenhuma agenda criada ainda. Crie a primeira abaixo." : "Você ainda não é dono de nenhuma agenda."}
+            {isAdmin ? "Nenhuma agenda criada ainda. Crie a primeira abaixo." : "Nenhuma agenda foi atribuída a você ainda. Fale com um administrador."}
           </p>
         )}
         {agendas.map((a) => {
@@ -78,11 +78,11 @@ export default async function Agendas({ searchParams }: { searchParams: Search }
                 <select id="owner_id" name="owner_id" required defaultValue="" className="input">
                   <option value="" disabled>Escolha um usuário</option>
                   {members.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.email})</option>
+                    <option key={m.id} value={m.id}>{m.name}{m.job ? ` · ${JOB_LABELS[m.job]}` : ""} ({m.email})</option>
                   ))}
                 </select>
                 <p className="hint">
-                  O dono é definido aqui e não muda depois. Falta alguém?{" "}
+                  O dono é definido aqui e não muda depois, e já tem acesso à agenda. Outras pessoas você libera na tela da agenda. Falta alguém?{" "}
                   <Link href="/dashboard/team" className="underline">Adicione em Equipe</Link>.
                 </p>
               </div>

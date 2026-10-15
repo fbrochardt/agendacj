@@ -1,7 +1,7 @@
 import "server-only";
 import { IANAZone } from "luxon";
 import { admin } from "./supabase/admin";
-import { RESERVED_USERNAMES } from "./types";
+import { RESERVED_USERNAMES, type Job } from "./types";
 
 export type NewUser = {
   email: string;
@@ -9,6 +9,7 @@ export type NewUser = {
   username: string;
   password: string;
   role: "admin" | "member";
+  job?: Job | null;
   timezone?: string;
 };
 
@@ -41,7 +42,7 @@ export async function createUser(u: NewUser): Promise<{ error: string | null }> 
   }
   const id = created.data.user.id;
 
-  const profile = await db.from("profiles").insert({ id, email, name, username, timezone, role: u.role });
+  const profile = await db.from("profiles").insert({ id, email, name, username, timezone, role: u.role, job: u.job ?? null });
   if (profile.error) {
     await db.auth.admin.deleteUser(id);
     return { error: profile.error.message };

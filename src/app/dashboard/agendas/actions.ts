@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { DateTime } from "luxon";
-import { isUuid } from "@/lib/agendas";
-import { requireAdmin } from "@/lib/auth";
+import { canAccessAgenda, isUuid } from "@/lib/agendas";
+import { requireAdmin, requireUser } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
 
 const LIST = "/dashboard/agendas";
@@ -64,7 +64,7 @@ export async function deleteAgenda(fd: FormData) {
 }
 
 export async function createAppointment(fd: FormData) {
-  const { profile } = await requireAdmin();
+  const { profile } = await requireUser();
   const agendaId = s(fd, "agenda_id");
   if (!isUuid(agendaId)) go(LIST, "error", "Agenda não encontrada.");
   const date = s(fd, "date");
@@ -72,7 +72,7 @@ export async function createAppointment(fd: FormData) {
 
   const db = admin();
   const agenda = await db.from("agendas").select("id, owner_id").eq("id", agendaId).maybeSingle();
-  if (!agenda.data) go(LIST, "error", "Agenda não encontrada.");
+  if (!agenda.data || !(await canAccessAgenda(profile, agenda.data))) go(LIST, "error", "Agenda não encontrada.");
   const owner = await db.from("profiles").select("timezone").eq("id", agenda.data!.owner_id).maybeSingle();
   const zone = owner.data?.timezone ?? "America/Fortaleza";
 
@@ -105,15 +105,46 @@ export async function createAppointment(fd: FormData) {
 }
 
 export async function cancelAppointment(fd: FormData) {
-  await requireAdmin();
+  const { profile } = await requireUser();
   const id = s(fd, "id");
   const agendaId = s(fd, "agenda_id");
   const dia = s(fd, "dia");
   const back = `${LIST}/${agendaId}${/^\d{4}-\d{2}-\d{2}$/.test(dia) ? `?dia=${dia}` : ""}`;
   if (!isUuid(id) || !isUuid(agendaId)) go(LIST, "error", "Agendamento não encontrado.");
+  const agenda = await admin().from("agendas").select("id, owner_id").eq("id", agendaId).maybeSingle();
+  if (!agenda.data || !(await canAccessAgenda(profile, agenda.data))) go(LIST, "error", "Agenda não encontrada.");
   const { error } = await admin()
     .from("appointments").update({ status: "cancelled" }).eq("id", id).eq("agenda_id", agendaId);
   if (error) go(back, "error", error.message);
   revalidatePath(`${LIST}/${agendaId}`);
   go(back, "ok", "Agendamento cancelado.");
+}
+
+// ---------- Acesso às agendas (somente admin) ----------
+
+export async function addAgendaMember(fd: FormData) {
+  const { profile } = await requireAdmin();
+  const agendaId = s(fd, "agenda_id");
+  const userId = s(fd, "user_id");
+  const back = `${LIST}/${agendaId}`;
+  if (!isUuid(agendaId)) go(LIST, "error", "Agenda não encontrada.");
+  if (!isUuid(userId)) go(back, "error", "Escolha uma pessoa.");
+  const { error } = await admin()
+    .from("agenda_members")
+    .upsert({ agenda_id: agendaId, user_id: userId, created_by: profile.id }, { onConflict: "agenda_id,user_id" });
+  if (error) go(back, "error", error.message);
+  revalidatePath(back);
+  go(back, "ok", "Acesso concedido.");
+}
+
+export async function removeAgendaMember(fd: FormData) {
+  await requireAdmin();
+  const agendaId = s(fd, "agenda_id");
+  const back = `${LIST}/${agendaId}`;
+  if (!isUuid(agendaId)) go(LIST, "error", "Agenda não encontrada.");
+  const { error } = await admin()
+    .from("agenda_members").delete().eq("agenda_id", agendaId).eq("user_id", s(fd, "user_id"));
+  if (error) go(back, "error", error.message);
+  revalidatePath(back);
+  go(back, "ok", "Acesso removido.");
 }
