@@ -8,6 +8,7 @@ import { admin } from "@/lib/supabase/admin";
 import { JOB_LABELS, ROLE_LABELS, type Profile } from "@/lib/types";
 import {
   addAgendaMember, cancelAppointment, createAppointment, deleteAgenda, removeAgendaMember, renameAgenda,
+  rescheduleAppointment,
 } from "../actions";
 
 type Props = {
@@ -89,7 +90,8 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                   const e = DateTime.fromISO(a.end_at, { zone });
                   const contact = [a.client_name, a.client_phone, a.client_email].filter(Boolean).join(" · ");
                   return (
-                    <div key={a.id} className="flex items-start justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+                    <div key={a.id} className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">
                           <span className="tabular-nums">{s.toFormat("HH:mm")}–{e.toFormat("HH:mm")}</span> · {a.title}
@@ -97,12 +99,35 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                         {contact && <p className="mt-0.5 break-words text-sm text-neutral-600">{contact}</p>}
                         {a.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-500">{a.notes}</p>}
                       </div>
-                        <form action={cancelAppointment} className="shrink-0">
-                          <input type="hidden" name="id" value={a.id} />
-                          <input type="hidden" name="agenda_id" value={agenda.id} />
-                          <input type="hidden" name="dia" value={key} />
-                          <button className="btn-danger">Cancelar</button>
-                        </form>
+                      <form action={cancelAppointment} className="shrink-0">
+                        <input type="hidden" name="id" value={a.id} />
+                        <input type="hidden" name="agenda_id" value={agenda.id} />
+                        <input type="hidden" name="dia" value={key} />
+                        <button className="btn-danger">Cancelar</button>
+                      </form>
+                    </div>
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-sm font-medium text-neutral-700 hover:text-neutral-900">Reagendar</summary>
+                      <form action={rescheduleAppointment} className="mt-2 flex flex-wrap items-end gap-2">
+                        <input type="hidden" name="id" value={a.id} />
+                        <input type="hidden" name="agenda_id" value={agenda.id} />
+                        <input type="hidden" name="dia" value={key} />
+                        <label className="text-xs text-neutral-500">
+                          Nova data
+                          <input name="date" type="date" required defaultValue={key} className="input mt-1 w-40" />
+                        </label>
+                        <label className="text-xs text-neutral-500">
+                          Início
+                          <input name="time" type="time" required defaultValue={s.toFormat("HH:mm")} className="input mt-1 w-28" />
+                        </label>
+                        <label className="text-xs text-neutral-500">
+                          Duração (min)
+                          <input name="duration_min" type="number" required min={5} max={720} step={5}
+                            defaultValue={Math.round(e.diff(s, "minutes").minutes)} className="input mt-1 w-24" />
+                        </label>
+                        <button className="btn-outline">Salvar novo horário</button>
+                      </form>
+                    </details>
                     </div>
                   );
                 })}

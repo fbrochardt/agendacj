@@ -120,6 +120,43 @@ export async function cancelAppointment(fd: FormData) {
   go(back, "ok", "Agendamento cancelado.");
 }
 
+export async function rescheduleAppointment(fd: FormData) {
+  const { profile } = await requireUser();
+  const id = s(fd, "id");
+  const agendaId = s(fd, "agenda_id");
+  const dia = s(fd, "dia");
+  const date = s(fd, "date");
+  const backTo = (d: string) => `${LIST}/${agendaId}${/^\d{4}-\d{2}-\d{2}$/.test(d) ? `?dia=${d}` : ""}`;
+  if (!isUuid(id) || !isUuid(agendaId)) go(LIST, "error", "Agendamento não encontrado.");
+
+  const db = admin();
+  const agenda = await db.from("agendas").select("id, owner_id").eq("id", agendaId).maybeSingle();
+  if (!agenda.data || !(await canAccessAgenda(profile, agenda.data))) go(LIST, "error", "Agenda não encontrada.");
+  const current = await db
+    .from("appointments").select("id, status").eq("id", id).eq("agenda_id", agendaId).maybeSingle();
+  if (!current.data || current.data.status !== "confirmed") go(backTo(dia), "error", "Agendamento não encontrado ou já cancelado.");
+
+  const owner = await db.from("profiles").select("timezone").eq("id", agenda.data!.owner_id).maybeSingle();
+  const zone = owner.data?.timezone ?? "America/Fortaleza";
+  const duration = Math.round(Number(fd.get("duration_min")));
+  // Data e hora são interpretadas no fuso do dono da agenda.
+  const start = DateTime.fromFormat(`${date} ${s(fd, "time")}`, "yyyy-MM-dd HH:mm", { zone });
+  if (!start.isValid) go(backTo(dia), "error", "Informe data e horário válidos.");
+  if (!Number.isFinite(duration) || duration < 5 || duration > 720) {
+    go(backTo(dia), "error", "A duração deve ficar entre 5 e 720 minutos.");
+  }
+
+  const { error } = await db
+    .from("appointments")
+    .update({ start_at: start.toUTC().toISO(), end_at: start.plus({ minutes: duration }).toUTC().toISO() })
+    .eq("id", id).eq("agenda_id", agendaId).eq("status", "confirmed");
+  if (error) {
+    go(backTo(dia), "error", error.code === "23P01" ? "Já existe um agendamento nesse horário nesta agenda." : error.message);
+  }
+  revalidatePath(`${LIST}/${agendaId}`);
+  go(backTo(date), "ok", `Reagendado para ${start.setLocale("pt-BR").toFormat("dd/LL 'às' HH:mm")}.`);
+}
+
 // ---------- Acesso às agendas (somente admin) ----------
 
 export async function addAgendaMember(fd: FormData) {
