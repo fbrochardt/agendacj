@@ -104,7 +104,8 @@ export async function createAppointment(fd: FormData) {
   go(back, "ok", `Agendado para ${start.setLocale("pt-BR").toFormat("dd/LL 'às' HH:mm")}.`);
 }
 
-export async function cancelAppointment(fd: FormData) {
+/** Muda o status de um agendamento confirmado para concluído ou cancelado e registra quem fez. */
+async function setAppointmentStatus(fd: FormData, status: "completed" | "cancelled") {
   const { profile } = await requireUser();
   const id = s(fd, "id");
   const agendaId = s(fd, "agenda_id");
@@ -113,11 +114,39 @@ export async function cancelAppointment(fd: FormData) {
   if (!isUuid(id) || !isUuid(agendaId)) go(LIST, "error", "Agendamento não encontrado.");
   const agenda = await admin().from("agendas").select("id, owner_id").eq("id", agendaId).maybeSingle();
   if (!agenda.data || !(await canAccessAgenda(profile, agenda.data))) go(LIST, "error", "Agenda não encontrada.");
-  const { error } = await admin()
-    .from("appointments").update({ status: "cancelled" }).eq("id", id).eq("agenda_id", agendaId);
+  const { data, error } = await admin()
+    .from("appointments")
+    .update({ status, status_changed_by: profile.id, status_changed_at: new Date().toISOString() })
+    .eq("id", id).eq("agenda_id", agendaId).eq("status", "confirmed")
+    .select("id");
   if (error) go(back, "error", error.message);
+  if (!data?.length) go(back, "error", "Esse agendamento já tinha sido concluído ou cancelado.");
   revalidatePath(`${LIST}/${agendaId}`);
-  go(back, "ok", "Agendamento cancelado.");
+  revalidatePath("/dashboard");
+  go(back, "ok", status === "completed" ? "Agendamento marcado como concluído." : "Agendamento cancelado e retirado da agenda.");
+}
+
+export async function completeAppointment(fd: FormData) {
+  await setAppointmentStatus(fd, "completed");
+}
+
+export async function cancelAppointment(fd: FormData) {
+  await setAppointmentStatus(fd, "cancelled");
+}
+
+/** Quem agendou marca o aviso de concluído/cancelado como visto (um ou todos). */
+export async function dismissNotice(fd: FormData) {
+  const { profile } = await requireUser();
+  const id = s(fd, "id");
+  let q = admin().from("appointments").update({ creator_seen_at: new Date().toISOString() })
+    .eq("created_by", profile.id).is("creator_seen_at", null).in("status", ["completed", "cancelled"]);
+  if (id !== "all") {
+    if (!isUuid(id)) redirect("/dashboard");
+    q = q.eq("id", id);
+  }
+  await q;
+  revalidatePath("/dashboard");
+  redirect("/dashboard");
 }
 
 export async function rescheduleAppointment(fd: FormData) {

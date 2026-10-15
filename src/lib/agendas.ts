@@ -20,8 +20,15 @@ export type Appointment = {
   client_phone: string | null;
   client_email: string | null;
   notes: string | null;
-  status: "confirmed" | "cancelled";
+  status: "confirmed" | "completed" | "cancelled";
+  created_by: string | null;
+  status_changed_by: string | null;
+  status_changed_at: string | null;
+  creator_seen_at: string | null;
 };
+
+/** Status que ocupam o horário na agenda (o cancelado sai da agenda). */
+export const ACTIVE = ["confirmed", "completed"];
 
 export type Owner = Pick<Profile, "id" | "name" | "username" | "timezone">;
 
@@ -90,7 +97,7 @@ export async function listAgendaMembers(agendaId: string): Promise<AgendaMember[
 
 export async function listAppointments(agendaId: string, from: Date, to: Date): Promise<Appointment[]> {
   const { data, error } = await admin()
-    .from("appointments").select("*").eq("agenda_id", agendaId).eq("status", "confirmed")
+    .from("appointments").select("*").eq("agenda_id", agendaId).in("status", ACTIVE)
     .lt("start_at", to.toISOString()).gt("end_at", from.toISOString()).order("start_at");
   if (error) throw new Error(error.message);
   return (data ?? []) as Appointment[];
@@ -104,7 +111,7 @@ export async function ownerBusy(ownerId: string, from: Date, to: Date) {
   const ids = (agendas.data ?? []).map((a) => a.id as string);
   if (ids.length === 0) return [];
   const { data, error } = await db
-    .from("appointments").select("start_at, end_at").in("agenda_id", ids).eq("status", "confirmed")
+    .from("appointments").select("start_at, end_at").in("agenda_id", ids).in("status", ACTIVE)
     .lt("start_at", to.toISOString()).gt("end_at", from.toISOString());
   if (error) throw new Error(error.message);
   return (data ?? []).map((a) => ({ start: Date.parse(a.start_at), end: Date.parse(a.end_at) }));
@@ -122,8 +129,35 @@ export async function ownerAppointments(
   const names = new Map((agendas.data ?? []).map((a) => [a.id as string, a.name as string]));
   if (names.size === 0) return [];
   const { data, error } = await db
-    .from("appointments").select("*").in("agenda_id", [...names.keys()]).eq("status", "confirmed")
+    .from("appointments").select("*").in("agenda_id", [...names.keys()]).in("status", ACTIVE)
     .lt("start_at", to.toISOString()).gt("end_at", from.toISOString()).order("start_at");
   if (error) throw new Error(error.message);
   return ((data ?? []) as Appointment[]).map((a) => ({ ...a, agenda_name: names.get(a.agenda_id) ?? "Agenda" }));
+}
+
+export type CreatorNotice = Appointment & { agenda_name: string; changed_by_name: string | null };
+
+/** Agendamentos criados por esta pessoa que outra pessoa concluiu ou cancelou, ainda não vistos. */
+export async function creatorNotices(userId: string): Promise<CreatorNotice[]> {
+  const db = admin();
+  const { data, error } = await db
+    .from("appointments").select("*")
+    .eq("created_by", userId).in("status", ["completed", "cancelled"]).is("creator_seen_at", null)
+    .or(`status_changed_by.is.null,status_changed_by.neq.${userId}`)
+    .order("status_changed_at", { ascending: false }).limit(50);
+  if (error) throw new Error(error.message);
+  const items = (data ?? []) as Appointment[];
+  if (items.length === 0) return [];
+  const [agendas, people] = await Promise.all([
+    db.from("agendas").select("id, name").in("id", [...new Set(items.map((a) => a.agenda_id))]),
+    db.from("profiles").select("id, name")
+      .in("id", [...new Set(items.map((a) => a.status_changed_by).filter((x): x is string => Boolean(x)))]),
+  ]);
+  const agendaName = new Map((agendas.data ?? []).map((a) => [a.id as string, a.name as string]));
+  const personName = new Map((people.data ?? []).map((p) => [p.id as string, p.name as string]));
+  return items.map((a) => ({
+    ...a,
+    agenda_name: agendaName.get(a.agenda_id) ?? "Agenda removida",
+    changed_by_name: a.status_changed_by ? (personName.get(a.status_changed_by) ?? null) : null,
+  }));
 }

@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { Flash, PageHeader, type Search } from "@/components/ui";
-import { listAgendas, ownerAppointments, seesAllAgendas } from "@/lib/agendas";
+import { creatorNotices, listAgendas, ownerAppointments, seesAllAgendas } from "@/lib/agendas";
 import { requireUser } from "@/lib/auth";
 import type { Booking } from "@/lib/types";
 import { cancelAsHost } from "./actions";
+import { dismissNotice } from "./agendas/actions";
 
 function when(b: Booking, zone: string) {
   const s = DateTime.fromISO(b.start_at, { zone }).setLocale("pt-BR");
@@ -37,21 +38,24 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
   ]);
   type TodayItem = {
     key: string; start: string; end: string; title: string; detail: string;
-    notes: string | null; origin: string; href: string | null; meetingUrl: string | null;
+    notes: string | null; origin: string; href: string | null; meetingUrl: string | null; completed: boolean;
   };
   const today: TodayItem[] = [
     ...((todayBookings.data ?? []) as Booking[]).map((b) => ({
       key: `b-${b.id}`, start: b.start_at, end: b.end_at, title: b.title,
       detail: [b.guest_name, b.guest_email, b.meeting_url ? null : b.location].filter(Boolean).join(" · "),
-      notes: b.notes, origin: "Página pública", href: null, meetingUrl: b.meeting_url,
+      notes: b.notes, origin: "Página pública", href: null, meetingUrl: b.meeting_url, completed: false,
     })),
     ...todayAppointments.map((a) => ({
       key: `a-${a.id}`, start: a.start_at, end: a.end_at, title: a.title,
       detail: [a.client_name, a.client_phone, a.client_email].filter(Boolean).join(" · "),
       notes: a.notes, origin: a.agenda_name, href: `/dashboard/agendas/${a.agenda_id}`, meetingUrl: null,
+      completed: a.status === "completed",
     })),
   ].sort((x, y) => Date.parse(x.start) - Date.parse(y.start));
   const nowMs = Date.now();
+  // Avisos para quem agendou: agendamentos dele que outra pessoa concluiu ou cancelou.
+  const notices = await creatorNotices(profile.id);
   // Usuários abrem as agendas atribuídas a eles por aqui (não têm o menu Agendas da equipe).
   const myAgendas = profile.role === "admin" ? [] : await listAgendas(profile);
 
@@ -63,6 +67,55 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
         <Flash error="Alguns agendamentos têm avisos de agenda (veja abaixo). Confira a página Google e Apple." />
       )}
 
+      {notices.length > 0 && (
+        <>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">
+              Avisos dos seus agendamentos{" "}
+              <span className="ml-1 rounded-full bg-neutral-900 px-2 py-0.5 text-xs font-normal text-white">{notices.length}</span>
+            </h2>
+            {notices.length > 1 && (
+              <form action={dismissNotice}>
+                <input type="hidden" name="id" value="all" />
+                <button className="text-sm text-neutral-500 underline hover:text-neutral-900">Marcar todos como vistos</button>
+              </form>
+            )}
+          </div>
+          <section className="card mb-8 divide-y divide-neutral-200">
+            {notices.map((n) => {
+              const ok = n.status === "completed";
+              const start = DateTime.fromISO(n.start_at, { zone }).setLocale("pt-BR");
+              const when = n.status_changed_at ? DateTime.fromISO(n.status_changed_at, { zone }).setLocale("pt-BR") : null;
+              return (
+                <div key={n.id} className={"flex flex-wrap items-start justify-between gap-3 border-l-4 p-4 " + (ok ? "border-l-emerald-500" : "border-l-red-500")}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      <span className={"mr-2 rounded-full px-2 py-0.5 text-xs font-normal " + (ok ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800")}>
+                        {ok ? "✓ Concluído" : "✕ Cancelado"}
+                      </span>
+                      {n.title}
+                      {n.client_name ? ` · ${n.client_name}` : ""}
+                    </p>
+                    <p className="mt-1 text-sm text-neutral-600">
+                      {n.agenda_name} · {start.toFormat("ccc, dd/LL 'às' HH:mm")}
+                    </p>
+                    <p className="mt-0.5 text-xs text-neutral-500">
+                      {ok ? "Concluído" : "Cancelado"}
+                      {n.changed_by_name ? ` por ${n.changed_by_name}` : ""}
+                      {when ? ` em ${when.toFormat("dd/LL 'às' HH:mm")}` : ""}
+                    </p>
+                  </div>
+                  <form action={dismissNotice} className="shrink-0">
+                    <input type="hidden" name="id" value={n.id} />
+                    <button className="btn-outline py-1.5">Ok, visto</button>
+                  </form>
+                </div>
+              );
+            })}
+          </section>
+        </>
+      )}
+
       <h2 className="mb-2 text-sm font-semibold">
         Hoje <span className="font-normal capitalize text-neutral-500">· {dayStart.setLocale("pt-BR").toFormat("cccc, dd 'de' LLLL")}</span>
       </h2>
@@ -72,9 +125,15 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
           const s = DateTime.fromISO(t.start, { zone });
           const e = DateTime.fromISO(t.end, { zone });
           const done = Date.parse(t.end) < nowMs;
-          const live = Date.parse(t.start) <= nowMs && !done;
+          const live = Date.parse(t.start) <= nowMs && !done && !t.completed;
           return (
-            <div key={t.key} className={"grid gap-1 p-4 sm:grid-cols-[110px_1fr] " + (done ? "opacity-50" : "")}>
+            <div
+              key={t.key}
+              className={
+                "grid gap-1 p-4 sm:grid-cols-[110px_1fr] " +
+                (t.completed ? "bg-emerald-50" : done ? "opacity-50" : "")
+              }
+            >
               <p className="text-sm font-medium tabular-nums">
                 {s.toFormat("HH:mm")}–{e.toFormat("HH:mm")}
               </p>
@@ -82,7 +141,8 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
                 <p className="text-sm font-medium">
                   {t.title}
                   {live && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-normal text-emerald-800">Agora</span>}
-                  {done && <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-normal text-neutral-600">Concluído</span>}
+                  {t.completed && <span className="ml-2 rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-normal text-white">✓ Concluído</span>}
+                  {done && !t.completed && <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-normal text-neutral-600">Horário encerrado</span>}
                 </p>
                 {t.detail && <p className="mt-0.5 break-words text-sm text-neutral-600">{t.detail}</p>}
                 {t.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-500">{t.notes}</p>}

@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
 import { JOB_LABELS, ROLE_LABELS, type Profile } from "@/lib/types";
 import {
-  addAgendaMember, cancelAppointment, createAppointment, deleteAgenda, removeAgendaMember, renameAgenda,
+  addAgendaMember, cancelAppointment, completeAppointment, createAppointment, deleteAgenda, removeAgendaMember, renameAgenda,
   rescheduleAppointment,
 } from "../actions";
 
@@ -93,23 +93,46 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                   const s = DateTime.fromISO(a.start_at, { zone });
                   const e = DateTime.fromISO(a.end_at, { zone });
                   const contact = [a.client_name, a.client_phone, a.client_email].filter(Boolean).join(" · ");
+                  const done = a.status === "completed";
                   return (
-                    <div key={a.id} className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+                    <div
+                      key={a.id}
+                      className={
+                        "rounded-lg border px-3 py-2 " +
+                        (done ? "border-emerald-300 bg-emerald-50" : "border-neutral-200 bg-neutral-50")
+                      }
+                    >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">
                           <span className="tabular-nums">{s.toFormat("HH:mm")}–{e.toFormat("HH:mm")}</span> · {a.title}
+                          {done && (
+                            <span className="ml-2 rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-normal text-white">✓ Concluído</span>
+                          )}
                         </p>
                         {contact && <p className="mt-0.5 break-words text-sm text-neutral-600">{contact}</p>}
                         {a.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-500">{a.notes}</p>}
                       </div>
-                      <form action={cancelAppointment} className="shrink-0">
-                        <input type="hidden" name="id" value={a.id} />
-                        <input type="hidden" name="agenda_id" value={agenda.id} />
-                        <input type="hidden" name="dia" value={key} />
-                        <button className="btn-danger">Cancelar</button>
-                      </form>
+                      {!done && (
+                        <div className="flex shrink-0 gap-2">
+                          <form action={completeAppointment}>
+                            <input type="hidden" name="id" value={a.id} />
+                            <input type="hidden" name="agenda_id" value={agenda.id} />
+                            <input type="hidden" name="dia" value={key} />
+                            <button className="inline-flex cursor-pointer items-center rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50">
+                              Concluído
+                            </button>
+                          </form>
+                          <form action={cancelAppointment}>
+                            <input type="hidden" name="id" value={a.id} />
+                            <input type="hidden" name="agenda_id" value={agenda.id} />
+                            <input type="hidden" name="dia" value={key} />
+                            <button className="btn-danger">Cancelar</button>
+                          </form>
+                        </div>
+                      )}
                     </div>
+                    {!done && (
                     <details className="mt-2">
                       <summary className="cursor-pointer text-sm font-medium text-neutral-700 hover:text-neutral-900">Reagendar</summary>
                       <form action={rescheduleAppointment} className="mt-2 flex flex-wrap items-end gap-2">
@@ -132,6 +155,7 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                         <button className="btn-outline">Salvar novo horário</button>
                       </form>
                     </details>
+                    )}
                     </div>
                   );
                 })}
