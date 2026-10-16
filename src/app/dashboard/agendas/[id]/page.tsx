@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
 import { JOB_LABELS, ROLE_LABELS, type Profile } from "@/lib/types";
 import {
-  addAgendaMember, cancelAppointment, completeAppointment, createAppointment, deleteAgenda, removeAgendaMember, renameAgenda,
+  addAgendaMember, cancelAppointment, completeAppointment, createAppointment, reopenAppointment, deleteAgenda, removeAgendaMember, renameAgenda,
   updateAppointment,
 } from "../actions";
 
@@ -113,6 +113,14 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                         {contact && <p className="mt-0.5 break-words text-sm text-neutral-600">{contact}</p>}
                         {a.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-500">{a.notes}</p>}
                       </div>
+                      {done && (
+                        <form action={reopenAppointment} className="shrink-0">
+                          <input type="hidden" name="id" value={a.id} />
+                          <input type="hidden" name="agenda_id" value={agenda.id} />
+                          <input type="hidden" name="dia" value={key} />
+                          <button className="btn-outline py-1.5">↺ Retomar</button>
+                        </form>
+                      )}
                       {!done && (
                         <div className="flex shrink-0 gap-2">
                           <form action={completeAppointment}>

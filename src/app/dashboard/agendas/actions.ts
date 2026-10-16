@@ -126,6 +126,29 @@ async function setAppointmentStatus(fd: FormData, status: "completed" | "cancell
   go(back, "ok", status === "completed" ? "Agendamento marcado como concluído." : "Agendamento cancelado e retirado da agenda.");
 }
 
+/** Volta um agendamento concluído para pendente (confirmado). */
+export async function reopenAppointment(fd: FormData) {
+  const { profile } = await requireUser();
+  const id = s(fd, "id");
+  const agendaId = s(fd, "agenda_id");
+  const dia = s(fd, "dia");
+  const back = `${LIST}/${agendaId}${/^\d{4}-\d{2}-\d{2}$/.test(dia) ? `?dia=${dia}` : ""}`;
+  if (!isUuid(id) || !isUuid(agendaId)) go(LIST, "error", "Agendamento não encontrado.");
+  const agenda = await admin().from("agendas").select("id, owner_id").eq("id", agendaId).maybeSingle();
+  if (!agenda.data || !(await canAccessAgenda(profile, agenda.data))) go(LIST, "error", "Agenda não encontrada.");
+  // Limpa o registro de conclusão: o aviso pendente some e, se concluir de novo, quem agendou é avisado de novo.
+  const { data, error } = await admin()
+    .from("appointments")
+    .update({ status: "confirmed", status_changed_by: null, status_changed_at: null, creator_seen_at: null })
+    .eq("id", id).eq("agenda_id", agendaId).eq("status", "completed")
+    .select("id");
+  if (error) go(back, "error", error.message);
+  if (!data?.length) go(back, "error", "Esse agendamento não está concluído.");
+  revalidatePath(`${LIST}/${agendaId}`);
+  revalidatePath("/dashboard");
+  go(back, "ok", "Agendamento retomado.");
+}
+
 export async function completeAppointment(fd: FormData) {
   await setAppointmentStatus(fd, "completed");
 }
