@@ -149,7 +149,8 @@ export async function dismissNotice(fd: FormData) {
   redirect("/dashboard");
 }
 
-export async function rescheduleAppointment(fd: FormData) {
+/** Edita título, cliente, contato, observações, data, horário e duração de um agendamento. */
+export async function updateAppointment(fd: FormData) {
   const { profile } = await requireUser();
   const id = s(fd, "id");
   const agendaId = s(fd, "agenda_id");
@@ -175,15 +176,26 @@ export async function rescheduleAppointment(fd: FormData) {
     go(backTo(dia), "error", "A duração deve ficar entre 5 e 720 minutos.");
   }
 
+  const title = s(fd, "title", 120);
+  if (!title) go(backTo(dia), "error", "Informe o título do agendamento.");
+
   const { error } = await db
     .from("appointments")
-    .update({ start_at: start.toUTC().toISO(), end_at: start.plus({ minutes: duration }).toUTC().toISO() })
+    .update({
+      title,
+      client_name: s(fd, "client_name", 120) || null,
+      client_phone: s(fd, "client_phone", 40) || null,
+      client_email: s(fd, "client_email", 200) || null,
+      notes: s(fd, "notes", 2000) || null,
+      start_at: start.toUTC().toISO(),
+      end_at: start.plus({ minutes: duration }).toUTC().toISO(),
+    })
     .eq("id", id).eq("agenda_id", agendaId).eq("status", "confirmed");
   if (error) {
     go(backTo(dia), "error", error.code === "23P01" ? "Já existe um agendamento nesse horário nesta agenda." : error.message);
   }
   revalidatePath(`${LIST}/${agendaId}`);
-  go(backTo(date), "ok", `Reagendado para ${start.setLocale("pt-BR").toFormat("dd/LL 'às' HH:mm")}.`);
+  go(backTo(date), "ok", `Agendamento atualizado (${start.setLocale("pt-BR").toFormat("dd/LL 'às' HH:mm")}).`);
 }
 
 // ---------- Acesso às agendas (somente admin) ----------

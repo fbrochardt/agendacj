@@ -8,7 +8,7 @@ import { admin } from "@/lib/supabase/admin";
 import { JOB_LABELS, ROLE_LABELS, type Profile } from "@/lib/types";
 import {
   addAgendaMember, cancelAppointment, completeAppointment, createAppointment, deleteAgenda, removeAgendaMember, renameAgenda,
-  rescheduleAppointment,
+  updateAppointment,
 } from "../actions";
 
 type Props = {
@@ -134,25 +134,51 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                     </div>
                     {!done && (
                     <details className="mt-2">
-                      <summary className="cursor-pointer text-sm font-medium text-neutral-700 hover:text-neutral-900">Reagendar</summary>
-                      <form action={rescheduleAppointment} className="mt-2 flex flex-wrap items-end gap-2">
+                      <summary className="cursor-pointer text-sm font-medium text-neutral-700 hover:text-neutral-900">
+                        Editar agendamento
+                      </summary>
+                      <form action={updateAppointment} className="mt-3 space-y-3">
                         <input type="hidden" name="id" value={a.id} />
                         <input type="hidden" name="agenda_id" value={agenda.id} />
                         <input type="hidden" name="dia" value={key} />
-                        <label className="text-xs text-neutral-500">
-                          Nova data
-                          <input name="date" type="date" required defaultValue={key} className="input mt-1 w-40" />
+                        <label className="block text-xs text-neutral-500">
+                          Título
+                          <input name="title" required maxLength={120} defaultValue={a.title} className="input mt-1" />
                         </label>
-                        <label className="text-xs text-neutral-500">
-                          Início
-                          <input name="time" type="time" required defaultValue={s.toFormat("HH:mm")} className="input mt-1 w-28" />
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <label className="text-xs text-neutral-500">
+                            Data
+                            <input name="date" type="date" required defaultValue={key} className="input mt-1" />
+                          </label>
+                          <label className="text-xs text-neutral-500">
+                            Início
+                            <input name="time" type="time" required defaultValue={s.toFormat("HH:mm")} className="input mt-1" />
+                          </label>
+                          <label className="text-xs text-neutral-500">
+                            Duração (min)
+                            <input name="duration_min" type="number" required min={5} max={720} step={5}
+                              defaultValue={Math.round(e.diff(s, "minutes").minutes)} className="input mt-1" />
+                          </label>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <label className="text-xs text-neutral-500">
+                            Cliente
+                            <input name="client_name" maxLength={120} defaultValue={a.client_name ?? ""} className="input mt-1" />
+                          </label>
+                          <label className="text-xs text-neutral-500">
+                            Telefone
+                            <input name="client_phone" type="tel" maxLength={40} defaultValue={a.client_phone ?? ""} className="input mt-1" />
+                          </label>
+                          <label className="text-xs text-neutral-500">
+                            E-mail
+                            <input name="client_email" type="email" maxLength={200} defaultValue={a.client_email ?? ""} className="input mt-1" />
+                          </label>
+                        </div>
+                        <label className="block text-xs text-neutral-500">
+                          Observações
+                          <textarea name="notes" rows={2} maxLength={2000} defaultValue={a.notes ?? ""} className="input mt-1" />
                         </label>
-                        <label className="text-xs text-neutral-500">
-                          Duração (min)
-                          <input name="duration_min" type="number" required min={5} max={720} step={5}
-                            defaultValue={Math.round(e.diff(s, "minutes").minutes)} className="input mt-1 w-24" />
-                        </label>
-                        <button className="btn-outline">Salvar novo horário</button>
+                        <button className="btn-outline">Salvar alterações</button>
                       </form>
                     </details>
                     )}
