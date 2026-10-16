@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AppointmentAlerts from "@/components/appointment-alerts";
 import { requireUser } from "@/lib/auth";
 import { signOut } from "./actions";
 
@@ -50,6 +51,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </button>
           </form>
         </nav>
+        <AppointmentAlerts />
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 md:px-10 md:py-8">{children}</main>
     </div>
