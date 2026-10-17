@@ -3,7 +3,7 @@ import { Flash, PageHeader, TimezoneSelect, type Search } from "@/components/ui"
 import { requireAdmin } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
 import { JOB_LABELS, ROLE_LABELS, type Profile } from "@/lib/types";
-import { addMember, removeMember, setJob, setRole } from "../actions";
+import { addMember, removeMember, resetPassword, setJob, setRole } from "../actions";
 
 export default async function Team({ searchParams }: { searchParams: Search }) {
   const { profile } = await requireAdmin();
@@ -68,6 +68,25 @@ export default async function Team({ searchParams }: { searchParams: Search }) {
                 </>
               )}
             </div>
+            {m.id !== profile.id && (
+              <details className="w-full">
+                <summary className="cursor-pointer text-sm text-neutral-600 hover:text-neutral-900">Redefinir senha</summary>
+                <form action={resetPassword} className="mt-2 flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="id" value={m.id} />
+                  <input
+                    name="password"
+                    type="text"
+                    required
+                    minLength={8}
+                    autoComplete="off"
+                    placeholder="Nova senha (mín. 8 caracteres)"
+                    aria-label={`Nova senha de ${m.name}`}
+                    className="input w-auto min-w-0 flex-1"
+                  />
+                  <button className="btn-outline py-1.5">Salvar nova senha</button>
+                </form>
+              </details>
+            )}
           </div>
         ))}
       </section>

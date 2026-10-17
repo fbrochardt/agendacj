@@ -252,6 +252,20 @@ export async function setJob(fd: FormData) {
   go(TEAM, "ok", "Função atualizada.");
 }
 
+/** O administrador define uma nova senha provisória para outra pessoa da equipe. */
+export async function resetPassword(fd: FormData) {
+  const { profile } = await requireAdmin();
+  const id = s(fd, "id");
+  const password = String(fd.get("password") ?? "");
+  if (id === profile.id) go(TEAM, "error", "Para trocar a sua própria senha, use a página Perfil.");
+  if (password.length < 8) go(TEAM, "error", "A nova senha precisa ter pelo menos 8 caracteres.");
+  const person = await admin().from("profiles").select("name").eq("id", id).maybeSingle();
+  if (!person.data) go(TEAM, "error", "Pessoa não encontrada.");
+  const { error } = await admin().auth.admin.updateUserById(id, { password });
+  if (error) go(TEAM, "error", error.message);
+  go(TEAM, "ok", `Senha de ${person.data!.name} redefinida. Envie a nova senha para a pessoa.`);
+}
+
 export async function removeMember(fd: FormData) {
   const { profile } = await requireAdmin();
   const id = s(fd, "id");
