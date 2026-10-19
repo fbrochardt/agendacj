@@ -30,7 +30,7 @@ function Kpi({ label, value, hint, tone }: { label: string; value: string | numb
   );
 }
 
-function TallyTable({ title, rows }: { title: string; rows: { key: string; name: string; sub?: string; t: Tally }[] }) {
+function TallyTable({ title, rows }: { title: string; rows: { key: string; name: string; sub?: string; t: Tally; created: number }[] }) {
   return (
     <section className="mb-8">
       <h2 className="mb-2 text-sm font-semibold">{title}</h2>
@@ -39,7 +39,8 @@ function TallyTable({ title, rows }: { title: string; rows: { key: string; name:
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500">
               <th className="px-4 py-2 font-medium">Nome</th>
-              <th className="px-3 py-2 text-right font-medium">Agendados</th>
+              <th className="px-3 py-2 text-right font-medium" title="Cadastrados no período">Criados</th>
+              <th className="px-3 py-2 text-right font-medium" title="Com data marcada no período">Agendados</th>
               <th className="px-3 py-2 text-right font-medium">Concluídos</th>
               <th className="px-3 py-2 text-right font-medium">Cancelados</th>
               <th className="px-3 py-2 text-right font-medium">Sem desfecho</th>
@@ -49,7 +50,7 @@ function TallyTable({ title, rows }: { title: string; rows: { key: string; name:
           </thead>
           <tbody className="divide-y divide-neutral-100">
             {rows.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-6 text-center text-neutral-500">Nada no período.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-6 text-center text-neutral-500">Nada no período.</td></tr>
             )}
             {rows.map((r) => (
               <tr key={r.key}>
@@ -57,6 +58,7 @@ function TallyTable({ title, rows }: { title: string; rows: { key: string; name:
                   <span className="font-medium">{r.name}</span>
                   {r.sub && <span className="ml-1.5 text-xs text-neutral-500">{r.sub}</span>}
                 </td>
+                <td className="px-3 py-2 text-right font-medium tabular-nums">{r.created}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.t.total}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{r.t.completed}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-red-700">{r.t.cancelled}</td>
@@ -82,20 +84,27 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
 
   const personName = (id: string | null) => (id ? (r.personById.get(id)?.name ?? "Usuário removido") : "—");
   const agendaName = (id: string) => r.agendaById.get(id)?.name ?? "Agenda removida";
-  const sortRows = <T extends { t: Tally }>(rows: T[]) => rows.sort((a, b) => b.t.total - a.t.total);
+  const sortRows = <T extends { t: Tally; created: number }>(rows: T[]) =>
+    rows.sort((a, b) => b.created - a.created || b.t.total - a.t.total);
 
+  const zero: Tally = { total: 0, completed: 0, cancelled: 0, upcoming: 0, no_outcome: 0 };
+  const keysOf = (a: Map<string, unknown>, b: Map<string, unknown>) => [...new Set([...a.keys(), ...b.keys()])];
   const agendaRows = sortRows(
-    [...r.byAgenda].map(([id, t]) => ({
+    keysOf(r.byAgenda, r.createdByAgenda).map((id) => [id, r.byAgenda.get(id) ?? zero] as const).map(([id, t]) => ({
       key: id,
       name: agendaName(id),
       sub: r.agendaById.get(id) ? `dono: ${personName(r.agendaById.get(id)!.owner_id)}` : undefined,
       t,
+      created: r.createdByAgenda.get(id) ?? 0,
     })),
   );
   const personRows = sortRows(
-    [...r.byPerson].map(([id, t]) => {
+    keysOf(r.byPerson, r.createdByPerson).map((id) => [id, r.byPerson.get(id) ?? zero] as const).map(([id, t]) => {
       const p = id === "-" ? null : r.personById.get(id);
-      return { key: id, name: id === "-" ? "Sem registro" : (p?.name ?? "Usuário removido"), sub: p?.job ? JOB_LABELS[p.job] : undefined, t };
+      return {
+        key: id, name: id === "-" ? "Sem registro" : (p?.name ?? "Usuário removido"),
+        sub: p?.job ? JOB_LABELS[p.job] : undefined, t, created: r.createdByPerson.get(id) ?? 0,
+      };
     }),
   );
   const days = [...r.byDay].sort(([a], [b]) => a.localeCompare(b));
@@ -165,10 +174,12 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
       </div>
 
       <p className="mb-2 text-xs text-neutral-500">
-        Contagens pela data marcada do agendamento. O filtro &quot;Pessoa&quot; considera quem criou o agendamento.
+        &quot;Criados&quot; conta pela data em que o agendamento foi cadastrado; os demais números, pela data marcada da
+        reunião. O filtro &quot;Pessoa&quot; considera quem criou o agendamento.
       </p>
-      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <Kpi label="Agendados" value={r.totals.total} />
+      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-7">
+        <Kpi label="Criados no período" value={r.createdTotal} tone="text-blue-700" hint="Cadastrados nessas datas" />
+        <Kpi label="Agendados" value={r.totals.total} hint="Reuniões marcadas nessas datas" />
         <Kpi label="Concluídos" value={r.totals.completed} tone="text-emerald-700" />
         <Kpi label="Cancelados" value={r.totals.cancelled} tone="text-red-700" hint={`${rate(r.totals.cancelled, r.totals.total)} do total`} />
         <Kpi label="Sem desfecho" value={r.totals.no_outcome} tone="text-amber-700" hint="Horário passou e não foi marcado" />

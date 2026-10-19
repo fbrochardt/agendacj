@@ -93,12 +93,32 @@ export async function loadReport(f: ReportFilters) {
   if (f.agendaId) ev = ev.eq("agenda_id", f.agendaId);
   if (f.personId) ev = ev.eq("actor_id", f.personId);
 
-  const [appts, events, agendas, people] = await Promise.all([
+  // Agendamentos criados (cadastrados) no período, independente da data marcada.
+  let cq = db
+    .from("appointments")
+    .select("agenda_id, created_by")
+    .gte("created_at", f.from.toUTC().toISO()!)
+    .lt("created_at", f.to.toUTC().toISO()!)
+    .limit(20000);
+  if (f.agendaId) cq = cq.eq("agenda_id", f.agendaId);
+  if (f.personId) cq = cq.eq("created_by", f.personId);
+
+  const [appts, events, agendas, people, createdQ] = await Promise.all([
     q,
     ev,
     db.from("agendas").select("id, name, owner_id").order("name"),
     db.from("profiles").select("id, name, job, role").order("name"),
+    cq,
   ]);
+  if (createdQ.error) throw new Error(createdQ.error.message);
+  const createdRows = (createdQ.data ?? []) as { agenda_id: string; created_by: string | null }[];
+  const createdByAgenda = new Map<string, number>();
+  const createdByPerson = new Map<string, number>();
+  for (const c of createdRows) {
+    createdByAgenda.set(c.agenda_id, (createdByAgenda.get(c.agenda_id) ?? 0) + 1);
+    const k = c.created_by ?? "-";
+    createdByPerson.set(k, (createdByPerson.get(k) ?? 0) + 1);
+  }
   if (appts.error) throw new Error(appts.error.message);
   if (events.error) throw new Error(events.error.message);
 
@@ -144,7 +164,7 @@ export async function loadReport(f: ReportFilters) {
     appointment: apptById.get(e.appointment_id) ?? extra.get(e.appointment_id) ?? null,
   }));
 
-  return { items, totals, byAgenda, byPerson, byDay, activity, agendaList, personList, agendaById, personById };
+  return { items, totals, createdTotal: createdRows.length, createdByAgenda, createdByPerson, byAgenda, byPerson, byDay, activity, agendaList, personList, agendaById, personById };
 }
 
 export function rate(part: number, total: number): string {
