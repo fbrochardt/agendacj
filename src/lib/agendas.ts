@@ -22,6 +22,7 @@ export type Appointment = {
   notes: string | null;
   status: "confirmed" | "completed" | "cancelled";
   created_by: string | null;
+  created_at: string;
   status_changed_by: string | null;
   status_changed_at: string | null;
   creator_seen_at: string | null;

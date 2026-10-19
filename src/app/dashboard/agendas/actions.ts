@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { DateTime } from "luxon";
+import { logActivity } from "@/lib/activity";
 import { canAccessAgenda, isUuid } from "@/lib/agendas";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
@@ -86,7 +87,7 @@ export async function createAppointment(fd: FormData) {
     go(back, "error", "A duração deve ficar entre 5 e 720 minutos.");
   }
 
-  const { error } = await db.from("appointments").insert({
+  const { data: created, error } = await db.from("appointments").insert({
     agenda_id: agendaId,
     title,
     start_at: start.toUTC().toISO(),
@@ -96,10 +97,11 @@ export async function createAppointment(fd: FormData) {
     client_email: s(fd, "client_email", 200) || null,
     notes: s(fd, "notes", 2000) || null,
     created_by: profile.id,
-  });
+  }).select("id").single();
   if (error) {
     go(back, "error", error.code === "23P01" ? "Já existe um agendamento nesse horário nesta agenda." : error.message);
   }
+  await logActivity({ appointmentId: created!.id, agendaId, actorId: profile.id, action: "created" });
   revalidatePath(`${LIST}/${agendaId}`);
   go(back, "ok", `Agendado para ${start.setLocale("pt-BR").toFormat("dd/LL 'às' HH:mm")}.`);
 }
@@ -121,6 +123,7 @@ async function setAppointmentStatus(fd: FormData, status: "completed" | "cancell
     .select("id");
   if (error) go(back, "error", error.message);
   if (!data?.length) go(back, "error", "Esse agendamento já tinha sido concluído ou cancelado.");
+  await logActivity({ appointmentId: id, agendaId, actorId: profile.id, action: status });
   revalidatePath(`${LIST}/${agendaId}`);
   revalidatePath("/dashboard");
   go(back, "ok", status === "completed" ? "Agendamento marcado como concluído." : "Agendamento cancelado e retirado da agenda.");
@@ -144,6 +147,7 @@ export async function reopenAppointment(fd: FormData) {
     .select("id");
   if (error) go(back, "error", error.message);
   if (!data?.length) go(back, "error", "Esse agendamento não está concluído.");
+  await logActivity({ appointmentId: id, agendaId, actorId: profile.id, action: "reopened" });
   revalidatePath(`${LIST}/${agendaId}`);
   revalidatePath("/dashboard");
   go(back, "ok", "Agendamento retomado.");
@@ -186,7 +190,7 @@ export async function updateAppointment(fd: FormData) {
   const agenda = await db.from("agendas").select("id, owner_id").eq("id", agendaId).maybeSingle();
   if (!agenda.data || !(await canAccessAgenda(profile, agenda.data))) go(LIST, "error", "Agenda não encontrada.");
   const current = await db
-    .from("appointments").select("id, status").eq("id", id).eq("agenda_id", agendaId).maybeSingle();
+    .from("appointments").select("id, status, start_at, end_at").eq("id", id).eq("agenda_id", agendaId).maybeSingle();
   if (!current.data || current.data.status !== "confirmed") go(backTo(dia), "error", "Agendamento não encontrado ou já cancelado.");
 
   const owner = await db.from("profiles").select("timezone").eq("id", agenda.data!.owner_id).maybeSingle();
@@ -217,6 +221,17 @@ export async function updateAppointment(fd: FormData) {
   if (error) {
     go(backTo(dia), "error", error.code === "23P01" ? "Já existe um agendamento nesse horário nesta agenda." : error.message);
   }
+  const newStart = start.toUTC().toISO()!;
+  const newEnd = start.plus({ minutes: duration }).toUTC().toISO()!;
+  const moved =
+    Date.parse(current.data!.start_at) !== Date.parse(newStart) || Date.parse(current.data!.end_at) !== Date.parse(newEnd);
+  await logActivity({
+    appointmentId: id,
+    agendaId,
+    actorId: profile.id,
+    action: moved ? "rescheduled" : "updated",
+    details: moved ? { de: current.data!.start_at, para: newStart } : undefined,
+  });
   revalidatePath(`${LIST}/${agendaId}`);
   go(backTo(date), "ok", `Agendamento atualizado (${start.setLocale("pt-BR").toFormat("dd/LL 'às' HH:mm")}).`);
 }

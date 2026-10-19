@@ -17,6 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           { href: "/dashboard/agendas", label: "Agendas da equipe" },
           { href: "/dashboard/calendars", label: "Google e Apple" },
           { href: "/dashboard/team", label: "Equipe" },
+          { href: "/dashboard/reports", label: "Relatórios" },
           { href: "/dashboard/settings", label: "Perfil" },
         ]
       : [
