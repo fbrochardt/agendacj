@@ -27,7 +27,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         ];
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col md:flex-row">
-      <aside className="shrink-0 border-b border-neutral-200 px-4 py-4 md:w-56 md:border-b-0 md:border-r md:py-8">
+      <aside className="shrink-0 print:hidden border-b border-neutral-200 px-4 py-4 md:w-56 md:border-b-0 md:border-r md:py-8">
         <div className="mb-4 flex items-center justify-between md:block">
           <div>
             <p className="text-sm font-semibold">{profile.name}</p>
@@ -54,7 +54,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </nav>
         <AppointmentAlerts />
       </aside>
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-10 md:py-8">{children}</main>
+      <main className="min-w-0 flex-1 px-4 py-6 md:px-10 md:py-8 print:p-0">{children}</main>
     </div>
   );
 }

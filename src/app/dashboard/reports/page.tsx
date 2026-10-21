@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
+import PrintButton from "@/components/print-button";
 import { PageHeader } from "@/components/ui";
 import { ACTION_LABELS } from "@/lib/activity";
 import { requireAdmin } from "@/lib/auth";
@@ -132,10 +133,20 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
       <PageHeader
         title="Relatórios"
         subtitle={`Atividades das agendas da equipe · ${fmtPeriod} · horários em ${zone.replace(/_/g, " ")}`}
-        action={<a href={`/api/reports/csv?${qs}`} className="btn-outline">Exportar planilha (CSV)</a>}
+        action={
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <PrintButton fileName={`relatorio-agendas-${f.fromStr}-a-${f.toStr}`} />
+            <a href={`/api/reports/csv?${qs}`} className="btn-outline">Exportar planilha (CSV)</a>
+          </div>
+        }
       />
+      <p className="mb-4 hidden text-xs text-neutral-500 print:block">
+        Filtros: agenda {f.agendaId ? (r.agendaById.get(f.agendaId)?.name ?? "removida") : "todas"} · pessoa{" "}
+        {f.personId ? personName(f.personId) : "todas"} · gerado em{" "}
+        {DateTime.now().setZone(zone).setLocale("pt-BR").toFormat("dd/LL/yyyy 'às' HH:mm")} por {profile.name}
+      </p>
 
-      <form className="card mb-3 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5" method="get">
+      <form className="card mb-3 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5 print:hidden" method="get">
         <label className="text-xs text-neutral-500">
           De
           <input type="date" name="de" defaultValue={f.fromStr} className="input mt-1" />
@@ -165,7 +176,7 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
           <Link href="/dashboard/reports" className="btn-outline">Limpar</Link>
         </div>
       </form>
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-6 flex flex-wrap gap-2 print:hidden">
         {preset("Hoje", today, today)}
         {preset("Últimos 7 dias", today.minus({ days: 6 }), today)}
         {preset("Este mês", today.startOf("month"), today.endOf("month"))}
@@ -177,7 +188,7 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
         &quot;Criados&quot; conta pela data em que o agendamento foi cadastrado; os demais números, pela data marcada da
         reunião. O filtro &quot;Pessoa&quot; considera quem criou o agendamento.
       </p>
-      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-7">
+      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-7 print:grid-cols-4">
         <Kpi label="Criados no período" value={r.createdTotal} tone="text-blue-700" hint="Cadastrados nessas datas" />
         <Kpi label="Agendados" value={r.totals.total} hint="Reuniões marcadas nessas datas" />
         <Kpi label="Concluídos" value={r.totals.completed} tone="text-emerald-700" />

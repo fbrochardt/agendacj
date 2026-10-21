@@ -8,6 +8,35 @@ body {
   @apply bg-neutral-100 text-neutral-900 antialiased;
 }
 
+/* Impressão / PDF: fundo branco, cores das barras preservadas, sem cortar blocos no meio. */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+@media print {
+  body {
+    background: #fff;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .card {
+    break-inside: avoid;
+  }
+  table {
+    break-inside: auto;
+  }
+  tr,
+  thead {
+    break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+  h2 {
+    break-after: avoid;
+  }
+}
+
 @layer components {
   .btn {
     @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50;
