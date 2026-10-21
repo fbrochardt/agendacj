@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import { Flash, PageHeader } from "@/components/ui";
-import { listAgendaMembers, listAppointments, loadAgenda, type AgendaMember, type Appointment } from "@/lib/agendas";
+import { createdLabel, creatorNames, listAgendaMembers, listAppointments, loadAgenda, type AgendaMember, type Appointment } from "@/lib/agendas";
 import { requireUser } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
 import { JOB_LABELS, ROLE_LABELS, type Profile } from "@/lib/types";
@@ -45,6 +45,7 @@ export default async function AgendaPage({ params, searchParams }: Props) {
   const weekStart = focus.startOf("week");
   const days = Array.from({ length: 7 }, (_, i) => weekStart.plus({ days: i }));
   const items = await listAppointments(agenda.id, weekStart.toJSDate(), weekStart.plus({ weeks: 1 }).toJSDate());
+  const creators = await creatorNames(items);
 
   const byDay = new Map<string, Appointment[]>();
   for (const a of items) {
@@ -112,6 +113,7 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                         </p>
                         {contact && <p className="mt-0.5 break-words text-sm text-neutral-600">{contact}</p>}
                         {a.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-500">{a.notes}</p>}
+                        <p className="mt-1 text-xs text-neutral-500">👤 {createdLabel(a, creators, zone)}</p>
                       </div>
                       {done && (
                         <form action={reopenAppointment} className="shrink-0">

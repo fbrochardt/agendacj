@@ -1,4 +1,5 @@
 import "server-only";
+import { DateTime } from "luxon";
 import { admin } from "./supabase/admin";
 import type { Profile } from "./types";
 
@@ -161,4 +162,19 @@ export async function creatorNotices(userId: string): Promise<CreatorNotice[]> {
     agenda_name: agendaName.get(a.agenda_id) ?? "Agenda removida",
     changed_by_name: a.status_changed_by ? (personName.get(a.status_changed_by) ?? null) : null,
   }));
+}
+
+/** Nomes de quem criou cada agendamento (id do perfil → nome). */
+export async function creatorNames(items: Pick<Appointment, "created_by">[]): Promise<Map<string, string>> {
+  const ids = [...new Set(items.map((a) => a.created_by).filter((x): x is string => Boolean(x)))];
+  if (ids.length === 0) return new Map();
+  const { data } = await admin().from("profiles").select("id, name").in("id", ids);
+  return new Map((data ?? []).map((p) => [p.id as string, p.name as string]));
+}
+
+/** "Agendado por Fulano em 19/10 às 14:32" (no fuso informado). */
+export function createdLabel(a: Pick<Appointment, "created_by" | "created_at">, names: Map<string, string>, zone: string) {
+  const who = a.created_by ? (names.get(a.created_by) ?? "usuário removido") : "sem registro";
+  const when = DateTime.fromISO(a.created_at, { zone }).setLocale("pt-BR").toFormat("dd/LL 'às' HH:mm");
+  return `Agendado por ${who} em ${when}`;
 }

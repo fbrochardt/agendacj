@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { Flash, PageHeader, type Search } from "@/components/ui";
-import { creatorNotices, listAgendas, ownerAppointments, seesAllAgendas } from "@/lib/agendas";
+import { createdLabel, creatorNames, creatorNotices, listAgendas, ownerAppointments, seesAllAgendas } from "@/lib/agendas";
 import { requireUser } from "@/lib/auth";
 import type { Booking } from "@/lib/types";
 import { cancelAsHost } from "./actions";
@@ -39,17 +39,21 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
   type TodayItem = {
     key: string; start: string; end: string; title: string; detail: string;
     notes: string | null; origin: string; href: string | null; meetingUrl: string | null; completed: boolean;
+    createdBy: string | null;
   };
+  const creators = await creatorNames(todayAppointments);
   const today: TodayItem[] = [
     ...((todayBookings.data ?? []) as Booking[]).map((b) => ({
       key: `b-${b.id}`, start: b.start_at, end: b.end_at, title: b.title,
       detail: [b.guest_name, b.guest_email, b.meeting_url ? null : b.location].filter(Boolean).join(" · "),
       notes: b.notes, origin: "Página pública", href: null, meetingUrl: b.meeting_url, completed: false,
+      createdBy: `Reservado pelo cliente na página pública`,
     })),
     ...todayAppointments.map((a) => ({
       key: `a-${a.id}`, start: a.start_at, end: a.end_at, title: a.title,
       detail: [a.client_name, a.client_phone, a.client_email].filter(Boolean).join(" · "),
       notes: a.notes, origin: a.agenda_name, href: `/dashboard/agendas/${a.agenda_id}`, meetingUrl: null,
+      createdBy: createdLabel(a, creators, zone),
       completed: a.status === "completed",
     })),
   ].sort((x, y) => Date.parse(x.start) - Date.parse(y.start));
@@ -146,6 +150,7 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
                 </p>
                 {t.detail && <p className="mt-0.5 break-words text-sm text-neutral-600">{t.detail}</p>}
                 {t.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-500">{t.notes}</p>}
+                {t.createdBy && <p className="mt-0.5 text-xs text-neutral-500">👤 {t.createdBy}</p>}
                 <p className="mt-1 text-xs text-neutral-500">
                   {t.href ? <Link href={t.href} className="underline">{t.origin}</Link> : t.origin}
                   {t.meetingUrl && (
