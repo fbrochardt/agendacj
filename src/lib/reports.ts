@@ -171,3 +171,35 @@ export function rate(part: number, total: number): string {
   if (!total) return "—";
   return `${Math.round((part / total) * 100)}%`;
 }
+
+function cell(v: unknown): string {
+  const s = v === null || v === undefined ? "" : String(v);
+  // Evita que planilhas interpretem o conteúdo como fórmula.
+  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
+  return /[";\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+/** Planilha CSV (ponto e vírgula, com BOM) com todos os agendamentos do relatório. */
+export function buildReportCsv(r: Awaited<ReturnType<typeof loadReport>>, zone: string): string {
+  const now = Date.now();
+  const person = (id: string | null) => (id ? (r.personById.get(id)?.name ?? "Usuário removido") : "");
+  const fmt = (iso: string | null) => (iso ? DateTime.fromISO(iso, { zone }).toFormat("dd/LL/yyyy HH:mm") : "");
+
+  const header = [
+    "Data", "Início", "Fim", "Agenda", "Dono da agenda", "Título", "Cliente", "Telefone", "E-mail",
+    "Observações", "Agendado por", "Agendado em", "Situação", "Desfecho por", "Desfecho em",
+  ];
+  const rows = r.items.map((a) => {
+    const ag = r.agendaById.get(a.agenda_id);
+    const s = DateTime.fromISO(a.start_at, { zone });
+    return [
+      s.toFormat("dd/LL/yyyy"), s.toFormat("HH:mm"), DateTime.fromISO(a.end_at, { zone }).toFormat("HH:mm"),
+      ag?.name ?? "Agenda removida", ag ? person(ag.owner_id) : "", a.title, a.client_name, a.client_phone,
+      a.client_email, a.notes, person(a.created_by), fmt(a.created_at), OUTCOME_LABELS[outcomeOf(a, now)],
+      person(a.status_changed_by), fmt(a.status_changed_at),
+    ];
+  });
+
+  // Ponto e vírgula + BOM: abre direto no Excel em português com acentos corretos.
+  return "\uFEFF" + [header, ...rows].map((r) => r.map(cell).join(";")).join("\r\n");
+}
