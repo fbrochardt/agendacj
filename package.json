@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/core.test.ts",
+    "test": "node --test tests/core.test.ts tests/report-pdf.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +16,7 @@
     "ical.js": "^2.2.1",
     "luxon": "^3.7.2",
     "next": "15.5.27",
+    "pdf-lib": "^1.17.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "server-only": "^0.0.1",
