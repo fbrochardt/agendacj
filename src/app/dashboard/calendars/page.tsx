@@ -3,7 +3,9 @@ import { requireAdmin } from "@/lib/auth";
 import { googleConfigured } from "@/lib/calendars/google";
 import { admin } from "@/lib/supabase/admin";
 import type { CalendarConnection } from "@/lib/types";
-import { connectApple, disconnectCalendar, setDestination } from "../actions";
+import { connectApple, disconnectCalendar, setDestination, syncAllGoogle } from "../actions";
+
+export const maxDuration = 300;
 
 type Row = Omit<CalendarConnection, "secret">;
 
@@ -42,7 +44,7 @@ export default async function Calendars({ searchParams }: { searchParams: Search
               </div>
               <form action={disconnectCalendar}>
                 <input type="hidden" name="id" value={c.id} />
-                <button className="btn-danger">Desconectar</button>
+                <button className="btn-danger" title="As agendas ligadas a esta conta deixam de enviar para o Google até você conectar de novo.">Desconectar</button>
               </form>
             </div>
             {c.last_error && (
@@ -69,6 +71,17 @@ export default async function Calendars({ searchParams }: { searchParams: Search
           </div>
         ))}
       </section>
+
+      {rows.some((c) => c.provider === "google") && (
+        <section className="card mb-8 flex flex-wrap items-center justify-between gap-3 p-4">
+          <p className="text-sm text-neutral-600">
+            Reenvia para o Google Agenda todos os agendamentos de hoje em diante, com o link do Meet.
+          </p>
+          <form action={syncAllGoogle}>
+            <button className="btn">Sincronizar tudo com o Google</button>
+          </form>
+        </section>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card p-5">

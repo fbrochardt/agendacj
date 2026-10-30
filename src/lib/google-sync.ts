@@ -315,3 +315,35 @@ export async function createGoogleCalendar(
     return { id: null, error: err instanceof Error ? err.message : String(err), needsReconnect: false };
   }
 }
+
+/**
+ * Depois de reconectar a conta Google, religa as agendas que perderam a ligação
+ * (a conexão antiga foi apagada) quando o calendário delas existe nesta conta.
+ */
+export async function relinkAgendas(connectionId: string): Promise<string[]> {
+  const { data } = await admin()
+    .from("agendas").select("id, google_calendar_id").is("google_connection_id", null).not("google_calendar_id", "is", null);
+  const orphans = (data ?? []) as { id: string; google_calendar_id: string }[];
+  if (!orphans.length) return [];
+  const { calendars } = await listGoogleCalendars(connectionId);
+  const ids = new Set(calendars.map((c) => c.id));
+  const relinked = orphans.filter((o) => ids.has(o.google_calendar_id)).map((o) => o.id);
+  if (relinked.length) {
+    await admin().from("agendas").update({ google_connection_id: connectionId }).in("id", relinked);
+  }
+  return relinked;
+}
+
+/** Envia para o Google os agendamentos de hoje em diante de todas as agendas ligadas. */
+export async function syncAllLinkedAgendas(): Promise<{ agendas: number; total: number; errors: number }> {
+  const { data } = await admin()
+    .from("agendas").select("id").not("google_connection_id", "is", null).not("google_calendar_id", "is", null);
+  let total = 0;
+  let errors = 0;
+  for (const ag of data ?? []) {
+    const r = await syncUpcomingForAgenda(ag.id as string);
+    total += r.total;
+    errors += r.errors;
+  }
+  return { agendas: (data ?? []).length, total, errors };
+}

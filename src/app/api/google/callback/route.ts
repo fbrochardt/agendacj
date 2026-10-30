@@ -3,9 +3,11 @@ import { NextResponse } from "next/server";
 import { appUrl, requireAdmin } from "@/lib/auth";
 import { googleExchange } from "@/lib/calendars/google";
 import { encrypt } from "@/lib/crypto";
+import { relinkAgendas, syncAllLinkedAgendas } from "@/lib/google-sync";
 import { admin } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
   const { profile } = await requireAdmin();
@@ -26,7 +28,7 @@ export async function GET(req: Request) {
     const db = admin();
     const existing = await db.from("calendar_connections").select("id, is_destination").eq("user_id", profile.id);
     const hasDestination = (existing.data ?? []).some((c) => c.is_destination);
-    const { error } = await db.from("calendar_connections").upsert(
+    const { data: saved, error } = await db.from("calendar_connections").upsert(
       {
         user_id: profile.id,
         provider: "google",
@@ -36,8 +38,14 @@ export async function GET(req: Request) {
         ...(hasDestination ? {} : { is_destination: true }),
       },
       { onConflict: "user_id,provider,account" },
-    );
+    ).select("id").single();
     if (error) throw new Error(error.message);
+    // Se a conta tinha sido desconectada, as agendas perderam a ligação: religa e reenvia.
+    const relinked = await relinkAgendas(saved.id as string);
+    if (relinked.length) {
+      await syncAllLinkedAgendas();
+      return back("ok", `Google Agenda conectado (${email}). ${relinked.length} agenda(s) religada(s) e sincronizada(s).`);
+    }
     return back("ok", `Google Agenda conectado (${email}).`);
   } catch (err) {
     return back("error", err instanceof Error ? err.message : "Falha ao conectar com o Google.");

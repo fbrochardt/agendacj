@@ -7,6 +7,7 @@ import { requireAdmin, requireUser } from "@/lib/auth";
 import { cancelBooking } from "@/lib/booking";
 import { appleListCalendars } from "@/lib/calendars/apple";
 import { encrypt } from "@/lib/crypto";
+import { syncAllLinkedAgendas } from "@/lib/google-sync";
 import { admin } from "@/lib/supabase/admin";
 import { parseJob, type Booking, type CalendarConnection, type LocationType } from "@/lib/types";
 import { createUser, validateUsername } from "@/lib/users";
@@ -186,6 +187,14 @@ export async function disconnectCalendar(fd: FormData) {
     if (next.data?.[0]) await db.from("calendar_connections").update({ is_destination: true }).eq("id", next.data[0].id);
   }
   go(CAL, "ok", "Agenda desconectada.");
+}
+
+export async function syncAllGoogle() {
+  await requireAdmin();
+  const r = await syncAllLinkedAgendas();
+  if (r.agendas === 0) go(CAL, "error", "Nenhuma agenda está ligada a um calendário do Google.");
+  if (r.errors) go(CAL, "error", `${r.total - r.errors} de ${r.total} agendamentos enviados ao Google; ${r.errors} com erro (veja o aviso em cada agendamento).`);
+  go(CAL, "ok", `${r.total} agendamento(s) de ${r.agendas} agenda(s) enviados ao Google Agenda, com link do Meet.`);
 }
 
 export async function setDestination(fd: FormData) {
