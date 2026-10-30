@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { DateTime } from "luxon";
 import { logActivity } from "@/lib/activity";
 import { canAccessAgenda, isUuid } from "@/lib/agendas";
-import { listGoogleCalendars, syncAppointmentToGoogle, syncUpcomingForAgenda } from "@/lib/google-sync";
+import { createGoogleCalendar, listGoogleCalendars, syncAppointmentToGoogle, syncUpcomingForAgenda } from "@/lib/google-sync";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
 
@@ -23,8 +23,9 @@ export async function createAgenda(fd: FormData) {
   if (!name) go(LIST, "error", "Dê um nome para a agenda.");
   if (!isUuid(owner_id)) go(LIST, "error", "Escolha o dono da agenda.");
   const db = admin();
-  const owner = await db.from("profiles").select("id").eq("id", owner_id).maybeSingle();
+  const owner = await db.from("profiles").select("id, timezone").eq("id", owner_id).maybeSingle();
   if (!owner.data) go(LIST, "error", "Usuário não encontrado.");
+  const googleConn = fd.get("google_create") === "on" ? s(fd, "google_connection_id") : "";
   const { data, error } = await db
     .from("agendas")
     .insert({ name, owner_id, description: s(fd, "description") || null, created_by: profile.id })
@@ -32,7 +33,21 @@ export async function createAgenda(fd: FormData) {
     .single();
   if (error) go(LIST, "error", error.message);
   revalidatePath(LIST);
-  go(`${LIST}/${data!.id}`, "ok", "Agenda criada.");
+  const back = `${LIST}/${data!.id}`;
+
+  // Cria também a agenda no Google e já deixa as duas ligadas.
+  if (isUuid(googleConn)) {
+    const g = await createGoogleCalendar(googleConn, name, (owner.data!.timezone as string) ?? "America/Fortaleza");
+    if (g.id) {
+      await db.from("agendas").update({ google_connection_id: googleConn, google_calendar_id: g.id, google_calendar_name: name })
+        .eq("id", data!.id);
+      go(back, "ok", `Agenda criada no app e no Google Agenda (“${name}”), já sincronizadas.`);
+    }
+    go(back, "error", g.needsReconnect
+      ? "Agenda criada no app, mas não no Google: reconecte a conta Google em “Google e Apple” para liberar a criação de agendas e depois ligue esta agenda abaixo."
+      : `Agenda criada no app, mas não no Google (${g.error}). Você pode ligar uma agenda do Google abaixo.`);
+  }
+  go(back, "ok", "Agenda criada.");
 }
 
 export async function renameAgenda(fd: FormData) {

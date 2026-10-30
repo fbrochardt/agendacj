@@ -22,8 +22,11 @@ export default async function Agendas({ searchParams }: { searchParams: Search }
   }
 
   let members: Pick<Profile, "id" | "name" | "email" | "job">[] = [];
+  let googleAccounts: { id: string; account: string }[] = [];
   if (isAdmin) {
     const { data } = await admin().from("profiles").select("id, name, email, job").order("name");
+    const g = await admin().from("calendar_connections").select("id, account").eq("provider", "google").order("account");
+    googleAccounts = (g.data ?? []) as { id: string; account: string }[];
     members = data ?? [];
   }
 
@@ -91,6 +94,27 @@ export default async function Agendas({ searchParams }: { searchParams: Search }
               <label className="label" htmlFor="description">Descrição (opcional)</label>
               <input id="description" name="description" maxLength={200} className="input" />
             </div>
+            {googleAccounts.length > 0 ? (
+              <div className="rounded-md border border-neutral-200 p-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" name="google_create" defaultChecked className="size-4 accent-neutral-900" />
+                  Criar também no Google Agenda
+                </label>
+                {googleAccounts.length > 1 ? (
+                  <select name="google_connection_id" defaultValue={googleAccounts[0].id} className="input mt-2" aria-label="Conta Google">
+                    {googleAccounts.map((g) => <option key={g.id} value={g.id}>{g.account}</option>)}
+                  </select>
+                ) : (
+                  <input type="hidden" name="google_connection_id" value={googleAccounts[0].id} />
+                )}
+                <p className="hint">
+                  Cria uma agenda com o mesmo nome {googleAccounts.length > 1 ? "na conta escolhida" : `em ${googleAccounts[0].account}`} e já
+                  liga as duas: os agendamentos daqui vão aparecer lá.
+                </p>
+              </div>
+            ) : (
+              <p className="hint">Conecte uma conta em Google e Apple para criar a agenda também no Google Agenda.</p>
+            )}
             <button className="btn">Criar agenda</button>
           </form>
         </>

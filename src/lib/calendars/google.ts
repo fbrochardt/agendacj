@@ -11,6 +11,8 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.freebusy",
   // Lista as agendas da conta (para ligar cada agenda da equipe a uma agenda do Google).
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  // Cria agendas novas na conta (quando uma agenda da equipe é criada no app).
+  "https://www.googleapis.com/auth/calendar.app.created",
 ];
 
 export type GoogleSecret = { access_token: string; refresh_token: string; expires_at: number };

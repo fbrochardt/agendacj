@@ -207,3 +207,24 @@ export async function syncUpcomingForAgenda(agendaId: string): Promise<{ total: 
   }
   return { total: ids.length, errors };
 }
+
+/** Cria uma agenda nova na conta Google e devolve o ID dela. */
+export async function createGoogleCalendar(
+  connectionId: string,
+  name: string,
+  timeZone: string,
+): Promise<{ id: string | null; error: string | null; needsReconnect: boolean }> {
+  const conn = await loadConnection(connectionId);
+  if (!conn || conn.provider !== "google") return { id: null, error: "Conta Google não encontrada.", needsReconnect: false };
+  try {
+    const token = await googleToken(conn);
+    const r = await call(token, "/calendars", { method: "POST", body: JSON.stringify({ summary: name, timeZone }) });
+    if (!r.ok) {
+      const insufficient = r.status === 403 && /insufficient|scope/i.test(JSON.stringify(r.json));
+      return { id: null, error: insufficient ? null : googleError(r.json, r.status), needsReconnect: insufficient };
+    }
+    return { id: (r.json as { id: string }).id, error: null, needsReconnect: false };
+  } catch (err) {
+    return { id: null, error: err instanceof Error ? err.message : String(err), needsReconnect: false };
+  }
+}
