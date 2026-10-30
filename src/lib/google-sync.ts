@@ -55,6 +55,25 @@ export async function listGoogleCalendars(
   }
 }
 
+/**
+ * Cria uma sala do Google Meet "aberta": qualquer pessoa com o link entra sem pedir
+ * para participar (API do Google Meet, accessType OPEN).
+ */
+async function createOpenMeetSpace(token: string): Promise<{ name: string; uri: string } | { error: string; reconnect: boolean }> {
+  const res = await fetch("https://meet.googleapis.com/v2/spaces", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ config: { accessType: "OPEN" } }),
+    cache: "no-store",
+  });
+  const json = (await res.json().catch(() => ({}))) as { name?: string; meetingUri?: string; error?: { message?: string } };
+  if (!res.ok || !json.name || !json.meetingUri) {
+    const msg = json.error?.message ?? `erro ${res.status}`;
+    return { error: msg, reconnect: res.status === 403 && /insufficient|scope/i.test(msg) };
+  }
+  return { name: json.name, uri: json.meetingUri };
+}
+
 /** Link da sala do Google Meet no evento, se houver. */
 function meetLink(json: unknown): string | null {
   const ev = json as { hangoutLink?: string; conferenceData?: { entryPoints?: { entryPointType: string; uri: string }[] } };
@@ -78,6 +97,7 @@ type SyncRow = {
   google_connection_id: string | null;
   wants_meet: boolean;
   meet_url: string | null;
+  meet_space_name: string | null;
 };
 
 const enc = encodeURIComponent;
@@ -172,12 +192,38 @@ export async function syncAppointmentToGoogle(appointmentId: string): Promise<vo
     const body = await eventBody(a, target!.name);
     const cal = enc(target!.google_calendar_id!);
 
-    // Reunião no Google Meet: mantém a que já existe, cria uma nova se pedida, remove se desmarcada.
+    // Reunião no Google Meet: sala "aberta" criada pela API do Meet (entra sem pedir para participar).
+    // Se a API do Meet não estiver disponível, cai para a sala comum do Google Agenda.
+    let meetUrl: string | null = null;
+    let spaceName: string | null = null;
+    let meetWarning: string | null = null;
+    if (a.wants_meet) {
+      if (a.meet_space_name && a.meet_url) {
+        spaceName = a.meet_space_name;
+        meetUrl = a.meet_url;
+      } else {
+        const space = await createOpenMeetSpace(token);
+        if ("uri" in space) {
+          spaceName = space.name;
+          meetUrl = space.uri;
+        } else {
+          meetWarning = space.reconnect
+            ? "sala do Meet criada sem acesso aberto: reconecte a conta Google em “Google e Apple” para liberar o Meet aberto."
+            : `sala do Meet criada sem acesso aberto (${space.error}). Verifique se a API do Google Meet está ativada.`;
+        }
+      }
+    }
+    const fallbackMeet = a.wants_meet && !meetUrl;
     const meetRequest = {
       createRequest: { requestId: `${a.id}-${Date.now()}`, conferenceSolutionKey: { type: "hangoutsMeet" } },
     };
-    const withMeet = (existing?: unknown) =>
-      a.wants_meet ? { ...body, conferenceData: existing ?? meetRequest } : body;
+    const fullBody = (existingConf?: unknown) => {
+      if (meetUrl) {
+        // Sala aberta: o link vai no local e na descrição do evento.
+        return { ...body, location: meetUrl, description: `Google Meet: ${meetUrl}\n\n${body.description}` };
+      }
+      return fallbackMeet ? { ...body, conferenceData: existingConf ?? meetRequest } : body;
+    };
 
     let r: Awaited<ReturnType<typeof call>> | null = null;
     if (a.google_event_id) {
@@ -188,7 +234,7 @@ export async function syncAppointmentToGoogle(appointmentId: string): Promise<vo
         // PUT substitui o evento inteiro (assim a cor some ao retomar um concluído).
         r = await call(token, `${path}?sendUpdates=none&conferenceDataVersion=1`, {
           method: "PUT",
-          body: JSON.stringify(withMeet(existingConf)),
+          body: JSON.stringify(fullBody(existingConf)),
         });
       } else if (current.status !== 404 && current.status !== 410) {
         r = current;
@@ -198,7 +244,7 @@ export async function syncAppointmentToGoogle(appointmentId: string): Promise<vo
     if (!r) {
       r = await call(token, `/calendars/${cal}/events?sendUpdates=none&conferenceDataVersion=1`, {
         method: "POST",
-        body: JSON.stringify(withMeet()),
+        body: JSON.stringify(fullBody()),
       });
     }
     if (!r.ok) {
@@ -206,19 +252,23 @@ export async function syncAppointmentToGoogle(appointmentId: string): Promise<vo
       return;
     }
     const eventId = (r.json as { id: string }).id;
-    let meetUrl = a.wants_meet ? meetLink(r.json) : null;
-    // O Google às vezes devolve a sala "pendente" e só gera o link um instante depois.
-    if (a.wants_meet && !meetUrl) {
-      await new Promise((res) => setTimeout(res, 1500));
-      const again = await call(token, `/calendars/${cal}/events/${enc(eventId)}`);
-      if (again.ok) meetUrl = meetLink(again.json);
+    if (fallbackMeet) {
+      meetUrl = meetLink(r.json);
+      // O Google às vezes devolve a sala "pendente" e só gera o link um instante depois.
+      if (!meetUrl) {
+        await new Promise((res) => setTimeout(res, 1500));
+        const again = await call(token, `/calendars/${cal}/events/${enc(eventId)}`);
+        if (again.ok) meetUrl = meetLink(again.json);
+      }
+      if (!meetUrl) meetWarning = "o link do Meet ainda não ficou pronto.";
     }
     await saveSync(a.id, {
       google_event_id: eventId,
       google_calendar_id: target!.google_calendar_id,
       google_connection_id: target!.google_connection_id,
-      meet_url: meetUrl,
-      google_sync_error: a.wants_meet && !meetUrl ? "Google Agenda: evento criado, mas o link do Meet ainda não ficou pronto." : null,
+      meet_url: a.wants_meet ? meetUrl : null,
+      meet_space_name: a.wants_meet ? spaceName : null,
+      google_sync_error: meetWarning ? `Google Meet: ${meetWarning}` : null,
     });
   } catch (err) {
     await saveSync(appointmentId, { google_sync_error: `Google Agenda: ${err instanceof Error ? err.message : String(err)}` });

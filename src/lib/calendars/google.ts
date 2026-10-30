@@ -13,6 +13,8 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   // Cria agendas novas na conta (quando uma agenda da equipe é criada no app).
   "https://www.googleapis.com/auth/calendar.app.created",
+  // Cria salas do Google Meet com acesso aberto (entra sem pedir para participar).
+  "https://www.googleapis.com/auth/meetings.space.created",
 ];
 
 export type GoogleSecret = { access_token: string; refresh_token: string; expires_at: number };
