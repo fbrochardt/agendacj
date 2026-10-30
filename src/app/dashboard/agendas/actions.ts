@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { DateTime } from "luxon";
 import { logActivity } from "@/lib/activity";
 import { canAccessAgenda, isUuid } from "@/lib/agendas";
+import { listGoogleCalendars, syncAppointmentToGoogle, syncUpcomingForAgenda } from "@/lib/google-sync";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { admin } from "@/lib/supabase/admin";
 
@@ -58,6 +59,9 @@ export async function deleteAgenda(fd: FormData) {
   if (s(fd, "confirm", 80) !== data!.name) {
     go(`${LIST}/${id}`, "error", "Para excluir, digite o nome da agenda exatamente como aparece.");
   }
+  // Tira do Google os eventos de hoje em diante antes de apagar a agenda.
+  await admin().from("agendas").update({ google_connection_id: null, google_calendar_id: null }).eq("id", id);
+  await syncUpcomingForAgenda(id);
   const { error } = await admin().from("agendas").delete().eq("id", id);
   if (error) go(`${LIST}/${id}`, "error", error.message);
   revalidatePath(LIST);
@@ -102,6 +106,7 @@ export async function createAppointment(fd: FormData) {
     go(back, "error", error.code === "23P01" ? "Já existe um agendamento nesse horário nesta agenda." : error.message);
   }
   await logActivity({ appointmentId: created!.id, agendaId, actorId: profile.id, action: "created" });
+  await syncAppointmentToGoogle(created!.id);
   revalidatePath(`${LIST}/${agendaId}`);
   go(back, "ok", `Agendado para ${start.setLocale("pt-BR").toFormat("dd/LL 'às' HH:mm")}.`);
 }
@@ -124,6 +129,7 @@ async function setAppointmentStatus(fd: FormData, status: "completed" | "cancell
   if (error) go(back, "error", error.message);
   if (!data?.length) go(back, "error", "Esse agendamento já tinha sido concluído ou cancelado.");
   await logActivity({ appointmentId: id, agendaId, actorId: profile.id, action: status });
+  await syncAppointmentToGoogle(id);
   revalidatePath(`${LIST}/${agendaId}`);
   revalidatePath("/dashboard");
   go(back, "ok", status === "completed" ? "Agendamento marcado como concluído." : "Agendamento cancelado e retirado da agenda.");
@@ -148,6 +154,7 @@ export async function reopenAppointment(fd: FormData) {
   if (error) go(back, "error", error.message);
   if (!data?.length) go(back, "error", "Esse agendamento não está concluído.");
   await logActivity({ appointmentId: id, agendaId, actorId: profile.id, action: "reopened" });
+  await syncAppointmentToGoogle(id);
   revalidatePath(`${LIST}/${agendaId}`);
   revalidatePath("/dashboard");
   go(back, "ok", "Agendamento retomado.");
@@ -232,6 +239,7 @@ export async function updateAppointment(fd: FormData) {
     action: moved ? "rescheduled" : "updated",
     details: moved ? { de: current.data!.start_at, para: newStart } : undefined,
   });
+  await syncAppointmentToGoogle(id);
   revalidatePath(`${LIST}/${agendaId}`);
   go(backTo(date), "ok", `Agendamento atualizado (${start.setLocale("pt-BR").toFormat("dd/LL 'às' HH:mm")}).`);
 }
@@ -263,4 +271,55 @@ export async function removeAgendaMember(fd: FormData) {
   if (error) go(back, "error", error.message);
   revalidatePath(back);
   go(back, "ok", "Acesso removido.");
+}
+
+// ---------- Ligação com o Google Agenda (somente admin) ----------
+
+export async function setAgendaGoogle(fd: FormData) {
+  await requireAdmin();
+  const id = s(fd, "id");
+  const back = `${LIST}/${id}`;
+  if (!isUuid(id)) go(LIST, "error", "Agenda não encontrada.");
+  const choice = s(fd, "google", 600);
+  const manual = s(fd, "manual_calendar_id", 300);
+  const connManual = s(fd, "manual_connection_id");
+
+  let patch: Record<string, string | null> = { google_connection_id: null, google_calendar_id: null, google_calendar_name: null };
+  if (manual) {
+    if (!isUuid(connManual)) go(back, "error", "Escolha a conta Google.");
+    patch = { google_connection_id: connManual, google_calendar_id: manual, google_calendar_name: manual };
+  } else if (choice) {
+    const sep = choice.indexOf("|");
+    const connId = choice.slice(0, sep);
+    const calId = choice.slice(sep + 1);
+    if (!isUuid(connId) || !calId) go(back, "error", "Escolha uma agenda do Google.");
+    const list = await listGoogleCalendars(connId);
+    const cal = list.calendars.find((c) => c.id === calId);
+    if (!cal) go(back, "error", "Essa agenda do Google não foi encontrada na conta.");
+    patch = { google_connection_id: connId, google_calendar_id: calId, google_calendar_name: cal!.name };
+  }
+  const { error } = await admin().from("agendas").update(patch).eq("id", id);
+  if (error) go(back, "error", error.message);
+
+  // Envia (ou move) os agendamentos de hoje em diante para a agenda escolhida.
+  const r = await syncUpcomingForAgenda(id);
+  revalidatePath(back);
+  const what = patch.google_calendar_id ? `ligada a “${patch.google_calendar_name}” no Google` : "desligada do Google";
+  if (r.errors) go(back, "error", `Agenda ${what}, mas ${r.errors} de ${r.total} agendamento(s) não sincronizaram. Veja os avisos.`);
+  go(back, "ok", `Agenda ${what}.${r.total ? ` ${r.total} agendamento(s) de hoje em diante sincronizados.` : ""}`);
+}
+
+export async function retryGoogleSync(fd: FormData) {
+  const { profile } = await requireUser();
+  const id = s(fd, "id");
+  const agendaId = s(fd, "agenda_id");
+  const dia = s(fd, "dia");
+  if (!isUuid(id) || !isUuid(agendaId)) go(LIST, "error", "Agendamento não encontrado.");
+  const agenda = await admin().from("agendas").select("id, owner_id").eq("id", agendaId).maybeSingle();
+  if (!agenda.data || !(await canAccessAgenda(profile, agenda.data))) go(LIST, "error", "Agenda não encontrada.");
+  const appt = await admin().from("appointments").select("id").eq("id", id).eq("agenda_id", agendaId).maybeSingle();
+  if (!appt.data) go(LIST, "error", "Agendamento não encontrado.");
+  await syncAppointmentToGoogle(id);
+  revalidatePath(`${LIST}/${agendaId}`);
+  go(`${LIST}/${agendaId}${/^\d{4}-\d{2}-\d{2}$/.test(dia) ? `?dia=${dia}` : ""}`, "ok", "Sincronização com o Google refeita.");
 }

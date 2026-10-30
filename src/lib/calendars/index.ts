@@ -17,7 +17,7 @@ async function setError(id: string, message: string | null) {
 }
 
 /** Devolve um access token válido do Google, renovando e salvando se preciso. */
-async function googleToken(conn: CalendarConnection): Promise<string> {
+export async function googleToken(conn: CalendarConnection): Promise<string> {
   let secret = JSON.parse(decrypt(conn.secret)) as GoogleSecret;
   if (secret.expires_at < Date.now() + 60_000) {
     secret = await googleRefresh(secret);

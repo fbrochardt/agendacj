@@ -8,8 +8,9 @@ import { admin } from "@/lib/supabase/admin";
 import { JOB_LABELS, ROLE_LABELS, type Profile } from "@/lib/types";
 import {
   addAgendaMember, cancelAppointment, completeAppointment, createAppointment, reopenAppointment, deleteAgenda, removeAgendaMember, renameAgenda,
-  updateAppointment,
+  retryGoogleSync, setAgendaGoogle, updateAppointment,
 } from "../actions";
+import { listGoogleCalendars, type GoogleCalendarOption } from "@/lib/google-sync";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -35,6 +36,14 @@ export default async function AgendaPage({ params, searchParams }: Props) {
     const all = await admin().from("profiles").select("id, name, role, job").eq("role", "member").order("name");
     candidates = ((all.data ?? []) as typeof candidates).filter((p) => !taken.has(p.id));
   }
+  // Contas Google conectadas no app e as agendas de cada uma (para ligar esta agenda).
+  let googleAccounts: { id: string; account: string; calendars: GoogleCalendarOption[]; needsReconnect: boolean; error: string | null }[] = [];
+  if (isAdmin) {
+    const conns = await admin().from("calendar_connections").select("id, account").eq("provider", "google").order("account");
+    googleAccounts = await Promise.all(
+      (conns.data ?? []).map(async (c) => ({ id: c.id as string, account: c.account as string, ...(await listGoogleCalendars(c.id as string)) })),
+    );
+  }
   const describe = (p: { role: Profile["role"]; job: Profile["job"] }) =>
     [p.job ? JOB_LABELS[p.job] : null, ROLE_LABELS[p.role]].filter(Boolean).join(" · ");
 
@@ -59,7 +68,9 @@ export default async function AgendaPage({ params, searchParams }: Props) {
     <>
       <PageHeader
         title={agenda.name}
-        subtitle={`Dono: ${owner.name} · horários em ${zone.replace(/_/g, " ")}`}
+        subtitle={`Dono: ${owner.name} · horários em ${zone.replace(/_/g, " ")}${
+          agenda.google_calendar_id ? ` · sincronizada com o Google (${agenda.google_calendar_name ?? agenda.google_calendar_id})` : ""
+        }`}
         action={
           isAdmin
             ? <Link href="/dashboard/agendas" className="btn-outline">Todas as agendas</Link>
@@ -114,6 +125,17 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                         {contact && <p className="mt-0.5 break-words text-sm text-neutral-600">{contact}</p>}
                         {a.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-500">{a.notes}</p>}
                         <p className="mt-1 text-xs text-neutral-500">👤 {createdLabel(a, creators, zone)}</p>
+                        {a.google_sync_error ? (
+                          <form action={retryGoogleSync} className="mt-1 flex flex-wrap items-center gap-2 text-xs text-amber-700">
+                            <input type="hidden" name="id" value={a.id} />
+                            <input type="hidden" name="agenda_id" value={agenda.id} />
+                            <input type="hidden" name="dia" value={key} />
+                            <span>⚠ Não foi para o Google Agenda: {a.google_sync_error}</span>
+                            <button className="cursor-pointer underline">Tentar de novo</button>
+                          </form>
+                        ) : (
+                          a.google_event_id && <p className="mt-0.5 text-xs text-neutral-500">📅 No Google Agenda</p>
+                        )}
                       </div>
                       {done && (
                         <form action={reopenAppointment} className="shrink-0">
@@ -276,6 +298,64 @@ export default async function AgendaPage({ params, searchParams }: Props) {
               <button className="btn-outline" disabled={!candidates.length}>Dar acesso</button>
             </form>
           </section>
+
+          <h2 className="mb-2 text-sm font-semibold">Google Agenda</h2>
+          <form action={setAgendaGoogle} className="card mb-8 max-w-2xl space-y-3 p-5">
+            <input type="hidden" name="id" value={agenda.id} />
+            <p className="text-sm text-neutral-600">
+              Escolha a agenda do Google que recebe os agendamentos desta agenda. Cada agendamento criado, editado,
+              concluído ou cancelado aqui é refletido lá automaticamente. Nenhum convite é enviado ao cliente.
+            </p>
+            {googleAccounts.length === 0 ? (
+              <p className="rounded-md bg-neutral-100 px-3 py-2 text-sm text-neutral-600">
+                Nenhuma conta Google conectada. Conecte em <Link href="/dashboard/calendars" className="underline">Google e Apple</Link>.
+              </p>
+            ) : (
+              <>
+                <select
+                  name="google"
+                  defaultValue={agenda.google_connection_id && agenda.google_calendar_id ? `${agenda.google_connection_id}|${agenda.google_calendar_id}` : ""}
+                  className="input"
+                  aria-label="Agenda do Google"
+                >
+                  <option value="">Não sincronizar com o Google</option>
+                  {googleAccounts.map((g) => (
+                    <optgroup key={g.id} label={g.account}>
+                      {g.calendars.map((c) => (
+                        <option key={c.id} value={`${g.id}|${c.id}`}>{c.name}{c.primary ? " (principal)" : ""}</option>
+                      ))}
+                      {agenda.google_connection_id === g.id && agenda.google_calendar_id &&
+                        !g.calendars.some((c) => c.id === agenda.google_calendar_id) && (
+                          <option value={`${g.id}|${agenda.google_calendar_id}`}>{agenda.google_calendar_name ?? agenda.google_calendar_id}</option>
+                        )}
+                    </optgroup>
+                  ))}
+                </select>
+                {googleAccounts.filter((g) => g.needsReconnect).map((g) => (
+                  <p key={g.id} className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Para listar as agendas de {g.account}, conecte essa conta de novo em{" "}
+                    <Link href="/dashboard/calendars" className="underline">Google e Apple</Link> (clique em “Conectar Google
+                    Agenda” e entre com a mesma conta). A permissão para ler a lista de agendas foi adicionada agora.
+                  </p>
+                ))}
+                {googleAccounts.filter((g) => g.error).map((g) => (
+                  <p key={g.id} className="text-xs text-amber-700">{g.account}: {g.error}</p>
+                ))}
+                <details className="text-xs text-neutral-500">
+                  <summary className="cursor-pointer">Informar o ID da agenda manualmente</summary>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <select name="manual_connection_id" defaultValue={googleAccounts[0]?.id} className="input" aria-label="Conta Google">
+                      {googleAccounts.map((g) => <option key={g.id} value={g.id}>{g.account}</option>)}
+                    </select>
+                    <input name="manual_calendar_id" placeholder="xxxx@group.calendar.google.com" className="input" aria-label="ID da agenda do Google" />
+                  </div>
+                  <p className="mt-1">No Google Agenda: configurações da agenda › Integrar agenda › ID da agenda.</p>
+                </details>
+                <button className="btn">Salvar e sincronizar</button>
+                <p className="hint">Ao salvar, os agendamentos de hoje em diante desta agenda são enviados (ou movidos) para a agenda escolhida.</p>
+              </>
+            )}
+          </form>
 
           <details className="max-w-2xl">
             <summary className="cursor-pointer text-sm font-semibold">Configurações da agenda</summary>

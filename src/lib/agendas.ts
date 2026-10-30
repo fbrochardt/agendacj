@@ -8,6 +8,9 @@ export type Agenda = {
   name: string;
   description: string | null;
   owner_id: string;
+  google_connection_id: string | null;
+  google_calendar_id: string | null;
+  google_calendar_name: string | null;
   created_at: string;
 };
 
@@ -27,6 +30,8 @@ export type Appointment = {
   status_changed_by: string | null;
   status_changed_at: string | null;
   creator_seen_at: string | null;
+  google_event_id: string | null;
+  google_sync_error: string | null;
 };
 
 /** Status que ocupam o horário na agenda (o cancelado sai da agenda). */

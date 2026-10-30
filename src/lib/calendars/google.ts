@@ -9,6 +9,8 @@ export const GOOGLE_SCOPES = [
   "email",
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.freebusy",
+  // Lista as agendas da conta (para ligar cada agenda da equipe a uma agenda do Google).
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
 
 export type GoogleSecret = { access_token: string; refresh_token: string; expires_at: number };
