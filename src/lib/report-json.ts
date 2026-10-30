@@ -59,6 +59,7 @@ export function buildReportJson(r: Awaited<ReturnType<typeof loadReport>>, f: Re
         telefone: a.client_phone,
         email: a.client_email,
         observacoes: a.notes,
+        link_meet: a.meet_url ?? null,
         situacao: o,
         situacao_texto: OUTCOME_LABELS[o],
         agendado_por: person(a.created_by),

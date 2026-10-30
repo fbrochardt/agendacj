@@ -23,6 +23,7 @@ export async function GET() {
         client_name: a.client_name,
         agenda_name: a.agenda_name,
         agenda_id: a.agenda_id,
+        meet_url: a.meet_url,
       }));
     return NextResponse.json({ now: now.toISOString(), upcoming });
   } catch (err) {

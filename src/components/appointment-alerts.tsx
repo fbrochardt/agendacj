@@ -10,6 +10,7 @@ type Upcoming = {
   client_name: string | null;
   agenda_name: string;
   agenda_id: string;
+  meet_url: string | null;
 };
 
 const LEAD_MS = 10 * 60_000; // avisa quando faltarem 10 minutos
@@ -191,7 +192,12 @@ export default function AppointmentAlerts() {
                   {a.client_name ? ` · ${a.client_name}` : ""}
                 </p>
                 <p className="text-xs text-amber-800">{a.agenda_name}</p>
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {a.meet_url && (
+                    <a href={a.meet_url} target="_blank" rel="noreferrer" className="btn bg-blue-600 py-1.5 hover:bg-blue-700">
+                      🎥 Entrar no Meet
+                    </a>
+                  )}
                   <Link href={`/dashboard/agendas/${a.agenda_id}`} className="btn-outline py-1.5">Abrir agenda</Link>
                   <button
                     type="button"

@@ -32,6 +32,8 @@ export type Appointment = {
   creator_seen_at: string | null;
   google_event_id: string | null;
   google_sync_error: string | null;
+  wants_meet: boolean;
+  meet_url: string | null;
 };
 
 /** Status que ocupam o horário na agenda (o cancelado sai da agenda). */

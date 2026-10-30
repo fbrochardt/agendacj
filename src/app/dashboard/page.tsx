@@ -52,7 +52,7 @@ export default async function Bookings({ searchParams }: { searchParams: Search 
     ...todayAppointments.map((a) => ({
       key: `a-${a.id}`, start: a.start_at, end: a.end_at, title: a.title,
       detail: [a.client_name, a.client_phone, a.client_email].filter(Boolean).join(" · "),
-      notes: a.notes, origin: a.agenda_name, href: `/dashboard/agendas/${a.agenda_id}`, meetingUrl: null,
+      notes: a.notes, origin: a.agenda_name, href: `/dashboard/agendas/${a.agenda_id}`, meetingUrl: a.meet_url,
       createdBy: createdLabel(a, creators, zone),
       completed: a.status === "completed",
     })),

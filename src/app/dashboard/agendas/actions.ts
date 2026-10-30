@@ -115,6 +115,7 @@ export async function createAppointment(fd: FormData) {
     client_phone: s(fd, "client_phone", 40) || null,
     client_email: s(fd, "client_email", 200) || null,
     notes: s(fd, "notes", 2000) || null,
+    wants_meet: fd.get("wants_meet") === "on",
     created_by: profile.id,
   }).select("id").single();
   if (error) {
@@ -236,6 +237,7 @@ export async function updateAppointment(fd: FormData) {
       client_phone: s(fd, "client_phone", 40) || null,
       client_email: s(fd, "client_email", 200) || null,
       notes: s(fd, "notes", 2000) || null,
+      wants_meet: fd.get("wants_meet") === "on",
       start_at: start.toUTC().toISO(),
       end_at: start.plus({ minutes: duration }).toUTC().toISO(),
     })

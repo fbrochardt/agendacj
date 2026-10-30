@@ -124,13 +124,26 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                         </p>
                         {contact && <p className="mt-0.5 break-words text-sm text-neutral-600">{contact}</p>}
                         {a.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-500">{a.notes}</p>}
+                        {a.meet_url && (
+                          <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                            <a
+                              href={a.meet_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                            >
+                              🎥 Entrar no Google Meet
+                            </a>
+                            <span className="select-all break-all text-xs text-neutral-600">{a.meet_url}</span>
+                          </p>
+                        )}
                         <p className="mt-1 text-xs text-neutral-500">👤 {createdLabel(a, creators, zone)}</p>
                         {a.google_sync_error ? (
                           <form action={retryGoogleSync} className="mt-1 flex flex-wrap items-center gap-2 text-xs text-amber-700">
                             <input type="hidden" name="id" value={a.id} />
                             <input type="hidden" name="agenda_id" value={agenda.id} />
                             <input type="hidden" name="dia" value={key} />
-                            <span>⚠ Não foi para o Google Agenda: {a.google_sync_error}</span>
+                            <span>⚠ {a.google_sync_error}</span>
                             <button className="cursor-pointer underline">Tentar de novo</button>
                           </form>
                         ) : (
@@ -210,6 +223,10 @@ export default async function AgendaPage({ params, searchParams }: Props) {
                           Observações
                           <textarea name="notes" rows={2} maxLength={2000} defaultValue={a.notes ?? ""} className="input mt-1" />
                         </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" name="wants_meet" defaultChecked={a.wants_meet} className="size-4 accent-neutral-900" />
+                          Reunião no Google Meet
+                        </label>
                         <button className="btn-outline">Salvar alterações</button>
                       </form>
                     </details>
@@ -263,6 +280,16 @@ export default async function AgendaPage({ params, searchParams }: Props) {
               <label className="label" htmlFor="notes">Observações</label>
               <textarea id="notes" name="notes" rows={2} maxLength={2000} className="input" />
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="wants_meet" defaultChecked className="size-4 accent-neutral-900" />
+              Gerar link do Google Meet
+            </label>
+            {!agenda.google_calendar_id && (
+              <p className="hint -mt-2">
+                O link do Meet só é gerado quando esta agenda está ligada a uma agenda do Google
+                {isAdmin ? " (seção Google Agenda, abaixo)" : " (peça a um administrador)"}.
+              </p>
+            )}
             <button className="btn">Agendar</button>
             <p className="hint">Cliente, telefone e e-mail são opcionais. Nenhuma mensagem é enviada ao cliente.</p>
           </form>

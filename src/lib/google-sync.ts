@@ -55,6 +55,12 @@ export async function listGoogleCalendars(
   }
 }
 
+/** Link da sala do Google Meet no evento, se houver. */
+function meetLink(json: unknown): string | null {
+  const ev = json as { hangoutLink?: string; conferenceData?: { entryPoints?: { entryPointType: string; uri: string }[] } };
+  return ev.hangoutLink ?? ev.conferenceData?.entryPoints?.find((p) => p.entryPointType === "video")?.uri ?? null;
+}
+
 type SyncRow = {
   id: string;
   agenda_id: string;
@@ -70,6 +76,8 @@ type SyncRow = {
   google_event_id: string | null;
   google_calendar_id: string | null;
   google_connection_id: string | null;
+  wants_meet: boolean;
+  meet_url: string | null;
 };
 
 const enc = encodeURIComponent;
@@ -145,7 +153,9 @@ export async function syncAppointmentToGoogle(appointmentId: string): Promise<vo
         await saveSync(a.id, { google_sync_error: err });
         return;
       }
-      await saveSync(a.id, { google_event_id: null, google_calendar_id: null, google_connection_id: null, google_sync_error: null });
+      await saveSync(a.id, {
+        google_event_id: null, google_calendar_id: null, google_connection_id: null, google_sync_error: null, meet_url: null,
+      });
       a.google_event_id = null;
     }
     if (!wantsEvent) {
@@ -162,26 +172,53 @@ export async function syncAppointmentToGoogle(appointmentId: string): Promise<vo
     const body = await eventBody(a, target!.name);
     const cal = enc(target!.google_calendar_id!);
 
-    let r = a.google_event_id
-      ? await call(token, `/calendars/${cal}/events/${enc(a.google_event_id)}?sendUpdates=none`, {
-          // PUT substitui o evento inteiro (assim a cor some ao retomar um concluído).
+    // Reunião no Google Meet: mantém a que já existe, cria uma nova se pedida, remove se desmarcada.
+    const meetRequest = {
+      createRequest: { requestId: `${a.id}-${Date.now()}`, conferenceSolutionKey: { type: "hangoutsMeet" } },
+    };
+    const withMeet = (existing?: unknown) =>
+      a.wants_meet ? { ...body, conferenceData: existing ?? meetRequest } : body;
+
+    let r: Awaited<ReturnType<typeof call>> | null = null;
+    if (a.google_event_id) {
+      const path = `/calendars/${cal}/events/${enc(a.google_event_id)}`;
+      const current = await call(token, path);
+      if (current.ok) {
+        const existingConf = (current.json as { conferenceData?: unknown }).conferenceData;
+        // PUT substitui o evento inteiro (assim a cor some ao retomar um concluído).
+        r = await call(token, `${path}?sendUpdates=none&conferenceDataVersion=1`, {
           method: "PUT",
-          body: JSON.stringify(body),
-        })
-      : null;
-    // Evento apagado direto no Google: cria de novo.
-    if (!r || r.status === 404 || r.status === 410) {
-      r = await call(token, `/calendars/${cal}/events?sendUpdates=none`, { method: "POST", body: JSON.stringify(body) });
+          body: JSON.stringify(withMeet(existingConf)),
+        });
+      } else if (current.status !== 404 && current.status !== 410) {
+        r = current;
+      }
+    }
+    // Sem evento ainda (ou apagado direto no Google): cria.
+    if (!r) {
+      r = await call(token, `/calendars/${cal}/events?sendUpdates=none&conferenceDataVersion=1`, {
+        method: "POST",
+        body: JSON.stringify(withMeet()),
+      });
     }
     if (!r.ok) {
       await saveSync(a.id, { google_sync_error: googleError(r.json, r.status) });
       return;
     }
+    const eventId = (r.json as { id: string }).id;
+    let meetUrl = a.wants_meet ? meetLink(r.json) : null;
+    // O Google às vezes devolve a sala "pendente" e só gera o link um instante depois.
+    if (a.wants_meet && !meetUrl) {
+      await new Promise((res) => setTimeout(res, 1500));
+      const again = await call(token, `/calendars/${cal}/events/${enc(eventId)}`);
+      if (again.ok) meetUrl = meetLink(again.json);
+    }
     await saveSync(a.id, {
-      google_event_id: (r.json as { id: string }).id,
+      google_event_id: eventId,
       google_calendar_id: target!.google_calendar_id,
       google_connection_id: target!.google_connection_id,
-      google_sync_error: null,
+      meet_url: meetUrl,
+      google_sync_error: a.wants_meet && !meetUrl ? "Google Agenda: evento criado, mas o link do Meet ainda não ficou pronto." : null,
     });
   } catch (err) {
     await saveSync(appointmentId, { google_sync_error: `Google Agenda: ${err instanceof Error ? err.message : String(err)}` });

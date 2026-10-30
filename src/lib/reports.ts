@@ -187,7 +187,7 @@ export function buildReportCsv(r: Awaited<ReturnType<typeof loadReport>>, zone: 
 
   const header = [
     "Data", "Início", "Fim", "Agenda", "Dono da agenda", "Título", "Cliente", "Telefone", "E-mail",
-    "Observações", "Agendado por", "Agendado em", "Situação", "Desfecho por", "Desfecho em",
+    "Observações", "Link do Meet", "Agendado por", "Agendado em", "Situação", "Desfecho por", "Desfecho em",
   ];
   const rows = r.items.map((a) => {
     const ag = r.agendaById.get(a.agenda_id);
@@ -195,7 +195,7 @@ export function buildReportCsv(r: Awaited<ReturnType<typeof loadReport>>, zone: 
     return [
       s.toFormat("dd/LL/yyyy"), s.toFormat("HH:mm"), DateTime.fromISO(a.end_at, { zone }).toFormat("HH:mm"),
       ag?.name ?? "Agenda removida", ag ? person(ag.owner_id) : "", a.title, a.client_name, a.client_phone,
-      a.client_email, a.notes, person(a.created_by), fmt(a.created_at), OUTCOME_LABELS[outcomeOf(a, now)],
+      a.client_email, a.notes, a.meet_url, person(a.created_by), fmt(a.created_at), OUTCOME_LABELS[outcomeOf(a, now)],
       person(a.status_changed_by), fmt(a.status_changed_at),
     ];
   });
