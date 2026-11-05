@@ -23,6 +23,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       : [
           { href: "/dashboard", label: "Agendamentos" },
           { href: "/dashboard/availability", label: "Disponibilidade" },
+          // SDR vê o próprio relatório.
+          ...(profile.job === "sdr" ? [{ href: "/dashboard/reports", label: "Meu relatório" }] : []),
           { href: "/dashboard/settings", label: "Perfil" },
         ];
   return (

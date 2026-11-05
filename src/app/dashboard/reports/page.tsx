@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
+import { redirect } from "next/navigation";
 import PrintButton from "@/components/print-button";
 import { PageHeader } from "@/components/ui";
 import { ACTION_LABELS } from "@/lib/activity";
-import { requireAdmin } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { loadReport, OUTCOME_LABELS, outcomeOf, parseFilters, rate, type Tally } from "@/lib/reports";
 import { JOB_LABELS } from "@/lib/types";
 
@@ -76,8 +77,12 @@ function TallyTable({ title, rows }: { title: string; rows: { key: string; name:
 }
 
 export default async function Reports({ searchParams }: { searchParams: SP }) {
-  const { profile } = await requireAdmin();
-  const sp = await searchParams;
+  const { profile } = await requireUser();
+  const isAdmin = profile.role === "admin";
+  // SDR que não é administrador vê só o próprio relatório (o que ela agendou e as ações que fez).
+  if (!isAdmin && profile.job !== "sdr") redirect("/dashboard");
+  const sp = { ...(await searchParams) };
+  if (!isAdmin) sp.pessoa = profile.id;
   const zone = profile.timezone;
   const f = parseFilters(sp, zone);
   const r = await loadReport(f);
@@ -131,11 +136,11 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
   return (
     <>
       <PageHeader
-        title="Relatórios"
-        subtitle={`Atividades das agendas da equipe · ${fmtPeriod} · horários em ${zone.replace(/_/g, " ")}`}
+        title={isAdmin ? "Relatórios" : "Meu relatório"}
+        subtitle={`${isAdmin ? "Atividades das agendas da equipe" : `Agendamentos criados por ${profile.name}`} · ${fmtPeriod} · horários em ${zone.replace(/_/g, " ")}`}
         action={
           <div className="flex flex-wrap gap-2 print:hidden">
-            <PrintButton fileName={`relatorio-agendas-${f.fromStr}-a-${f.toStr}`} />
+            <PrintButton fileName={`relatorio-${isAdmin ? "agendas" : profile.username}-${f.fromStr}-a-${f.toStr}`} />
             <a href={`/api/reports/csv?${qs}`} className="btn-outline">Exportar planilha (CSV)</a>
           </div>
         }
@@ -146,7 +151,7 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
         {DateTime.now().setZone(zone).setLocale("pt-BR").toFormat("dd/LL/yyyy 'às' HH:mm")} por {profile.name}
       </p>
 
-      <form className="card mb-3 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5 print:hidden" method="get">
+      <form className={`card mb-3 grid gap-3 p-4 sm:grid-cols-2 ${isAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"} print:hidden`} method="get">
         <label className="text-xs text-neutral-500">
           De
           <input type="date" name="de" defaultValue={f.fromStr} className="input mt-1" />
@@ -162,6 +167,7 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
             {r.agendaList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </label>
+        {isAdmin && (
         <label className="text-xs text-neutral-500">
           Pessoa (quem agendou)
           <select name="pessoa" defaultValue={f.personId ?? ""} className="input mt-1">
@@ -171,6 +177,7 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
             ))}
           </select>
         </label>
+        )}
         <div className="flex items-end gap-2">
           <button className="btn flex-1">Filtrar</button>
           <Link href="/dashboard/reports" className="btn-outline">Limpar</Link>
@@ -199,7 +206,7 @@ export default async function Reports({ searchParams }: { searchParams: SP }) {
       </div>
 
       <TallyTable title="Por agenda (vendedor)" rows={agendaRows} />
-      <TallyTable title="Por quem agendou (SDR)" rows={personRows} />
+      {isAdmin && <TallyTable title="Por quem agendou (SDR)" rows={personRows} />}
 
       <section className="mb-8">
         <h2 className="mb-2 text-sm font-semibold">Agendamentos por dia</h2>

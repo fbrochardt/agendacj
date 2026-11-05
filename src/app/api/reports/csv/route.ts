@@ -8,10 +8,15 @@ export async function GET(req: Request) {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-  const { data: me } = await supabase.from("profiles").select("role, timezone").eq("id", data.user.id).maybeSingle();
-  if (me?.role !== "admin") return NextResponse.json({ error: "Somente administradores." }, { status: 403 });
+  const { data: me } = await supabase.from("profiles").select("role, job, timezone").eq("id", data.user.id).maybeSingle();
+  const isAdmin = me?.role === "admin";
+  if (!me || (!isAdmin && me.job !== "sdr")) {
+    return NextResponse.json({ error: "Somente administradores e SDRs." }, { status: 403 });
+  }
 
   const sp = Object.fromEntries(new URL(req.url).searchParams);
+  // SDR que não é administrador só baixa o próprio relatório.
+  if (!isAdmin) sp.pessoa = data.user.id;
   const zone = me.timezone as string;
   const f = parseFilters(sp, zone);
   const r = await loadReport(f);
